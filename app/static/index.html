@@ -176,6 +176,7 @@ async function load() {
   const [cfg, bills, invs, audit, chat] = await Promise.all([api('/config'), api('/bills'), api('/invoices'), api('/audit'), api('/chat')]);
   CFG = cfg; const ce = document.querySelector('#form-invoice [name=customer_email]'); if (ce && !ce.value && cfg.demo_customer_email) ce.value = cfg.demo_customer_email;
   document.getElementById('meta').textContent = `${cfg.merchant_name} · ${cfg.env} · PayPal ${cfg.paypal?'connected':'not configured'} · LLM: ${cfg.llm} · auto-pay ≤ ${cfg.auto_pay_limit} ${cfg.currency}`;
+  BILLS = bills;
   billsGrid.setGridOption('rowData', bills);
   invGrid.setGridOption('rowData', invs);
   auditGrid.setGridOption('rowData', audit);
@@ -219,6 +220,13 @@ function busy(msg){ const b = document.getElementById('busy'); if (msg) { b.text
 function toast(text, kind='ok'){ const t = document.createElement('div'); t.className = 'toast ' + kind; t.textContent = text; document.body.appendChild(t); setTimeout(() => t.classList.add('show'), 10); setTimeout(() => { t.classList.remove('show'); setTimeout(() => t.remove(), 300); }, kind==='bad' ? 7000 : 3500); }
 async function act(fn, msg, done){ busy(msg || 'Working…'); try { await fn(); if (done) toast(done); } catch(err) { toast(err.message, 'bad'); } finally { busy(null); } await load(); }
 async function loadSamples(){
+  const samples0 = await api('/samples');
+  const names = new Set(samples0.map(x => x.name));
+  if (BILLS.some(b => names.has(b.source))) {
+    if (confirm('The sample inbox is already loaded.\n\nOK: start over (clears demo data and loads the samples fresh).\nCancel: load them again anyway and watch the agent reject them as duplicates.')) {
+      busy('Clearing demo data…'); await api('/reset', {method:'POST'}); await load();
+    }
+  }
   busy('Adding the suppliers the company already works with…');
   await api('/samples/suppliers', {method:'POST'});
   const samples = await api('/samples');
@@ -238,6 +246,7 @@ async function loadSampleInvoices(){
   }
 }
 let CFG = {};
+let BILLS = [];
 document.getElementById('btn-samples').onclick = () => act(loadSamples, 'Loading sample inbox…', 'Sample inbox processed: 2 bills auto-approved for trusted suppliers, 2 wait for you in the queue, 1 duplicate rejected. Click “Pay all approved”.');
 document.getElementById('btn-pay-approved').onclick = () => act(async () => { const r = await api('/bills/pay-approved', {method:'POST'}); const ok = r.filter(x => !x.error).length; if (!r.length) throw new Error('Nothing to pay: no bills in approved state. Approve something in the queue first.'); toast(`Paid ${ok} of ${r.length} approved bill(s) via PayPal Payouts`); }, 'Paying approved bills via PayPal Payouts…');
 document.getElementById('btn-refresh').onclick = () => act(() => api('/refresh', {method:'POST'}), 'Pulling statuses from PayPal…');
