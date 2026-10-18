@@ -271,7 +271,8 @@ def chat_history():
 
 @app.post("/api/chat")
 def chat(body: ChatIn):
-    return {"reply": kassa.chat(body.message)}
+    reply, tools = kassa.chat_with_trace(body.message)
+    return {"reply": reply, "tools": tools}
 
 
 @app.post("/api/reset")

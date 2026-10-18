@@ -2,299 +2,504 @@
 <html lang="en">
 <head>
 <meta charset="utf-8">
-<title>Kassa — agentic AP/AR on PayPal</title>
+<title>Kassa: the bookkeeper that pays your bills on PayPal</title>
 <meta name="viewport" content="width=device-width, initial-scale=1">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Schibsted+Grotesk:wght@400;500;600;700;800&display=swap" rel="stylesheet">
 <script src="https://cdn.jsdelivr.net/npm/ag-grid-community@33/dist/ag-grid-community.min.js"></script>
 <style>
-  :root { --bg:#0f1115; --panel:#171a21; --line:#262b36; --text:#e8eaf0; --muted:#8b93a7; --accent:#ffc439; --ok:#3ddc84; --warn:#ffb020; --bad:#ff5c5c; }
+  :root {
+    --ledger:#EDF2EA;   /* page: ledger paper */
+    --sheet:#F8FAF6;    /* table surface */
+    --rule:#D3DDD0;     /* ruled lines */
+    --ink:#17233B;      /* main text, primary actions */
+    --pencil:#5E6B66;   /* secondary text */
+    --paid:#1F6B45;     /* green ink */
+    --red:#B42318;      /* red ink */
+    --held:#8A5A00;     /* pencil amber for held */
+    --font:'Schibsted Grotesk', system-ui, sans-serif;
+  }
   * { box-sizing:border-box; }
-  body { margin:0; font:14px/1.45 Inter, system-ui, sans-serif; background:var(--bg); color:var(--text); }
-  header { display:flex; align-items:center; gap:16px; padding:12px 20px; border-bottom:1px solid var(--line); }
-  header h1 { font-size:18px; margin:0; letter-spacing:.3px; } header h1 span { color:var(--accent); }
-  header .meta { color:var(--muted); font-size:12px; margin-left:auto; }
-  header .busy { display:none; color:var(--accent); font-size:13px; font-weight:600; } header .busy.on { display:inline-flex; align-items:center; gap:8px; }
-  header .busy.on::before { content:''; width:12px; height:12px; border:2px solid var(--accent); border-top-color:transparent; border-radius:50%; animation:spin .8s linear infinite; }
+  html { background:var(--ledger); }
+  body { margin:0; font:15px/1.5 var(--font); color:var(--ink); background:var(--ledger); }
+  a { color:var(--ink); text-underline-offset:3px; }
+  button, input, textarea { font:inherit; color:inherit; }
+  :focus-visible { outline:2px solid var(--ink); outline-offset:2px; }
+
+  /* ---------- layout ---------- */
+  .app { display:grid; grid-template-columns:minmax(0,1fr) 380px; min-height:100vh; }
+  main { padding:28px 40px 60px; min-width:0; }
+  aside { background:var(--sheet); border-left:1px solid var(--rule); display:flex; flex-direction:column; height:100vh; position:sticky; top:0; }
+
+  .top { display:flex; align-items:baseline; gap:16px; margin-bottom:28px; }
+  .brand { font-weight:800; font-size:22px; letter-spacing:-.01em; }
+  .who { color:var(--pencil); font-size:13px; }
+  .top .spacer { flex:1; }
+  .linkbtn { background:none; border:0; padding:0; color:var(--pencil); text-decoration:underline; text-underline-offset:3px; cursor:pointer; font-size:13px; }
+
+  /* the one sentence that says what happened */
+  .summary { font-size:34px; line-height:1.18; font-weight:700; letter-spacing:-.02em; max-width:28ch; margin:0 0 18px; }
+  .summary .amt { color:var(--paid); }
+  .summary.empty { color:var(--pencil); font-weight:600; }
+  .actions { display:flex; flex-wrap:wrap; gap:10px; align-items:center; margin-bottom:36px; }
+
+  .btn { border:1px solid var(--ink); background:transparent; border-radius:6px; padding:8px 14px; cursor:pointer; font-weight:600; font-size:14px; }
+  .btn.solid { background:var(--ink); color:var(--sheet); }
+  .btn.green { border-color:var(--paid); color:var(--paid); }
+  .btn.green.solid { background:var(--paid); color:#fff; }
+  .btn.red { border-color:var(--red); color:var(--red); }
+  .btn.quiet { border-color:var(--rule); color:var(--pencil); font-weight:500; }
+  .btn:disabled { opacity:.45; cursor:default; }
+  .btn:not(:disabled):hover { box-shadow:inset 0 0 0 1px currentColor; }
+
+  /* ---------- needs you ---------- */
+  h2 { font-size:19px; margin:0 0 12px; font-weight:700; letter-spacing:-.01em; }
+  h2 .count { color:var(--pencil); font-weight:500; }
+  .needs { margin-bottom:40px; }
+  .needs .none { color:var(--pencil); }
+  .held { border-top:1px solid var(--rule); padding:16px 0; display:grid; grid-template-columns:minmax(0,1fr) auto; gap:6px 24px; align-items:start; }
+  .held:last-child { border-bottom:1px solid var(--rule); }
+  .held .who-line { font-weight:700; font-size:16px; }
+  .held .who-line .amount { font-weight:800; margin-left:8px; }
+  .held .sub { color:var(--pencil); font-size:13px; }
+  .held .why { font-size:14px; max-width:70ch; }
+  .held .ctl { display:flex; gap:8px; align-items:center; grid-row:1 / span 3; grid-column:2; }
+  .held label { font-size:13px; color:var(--pencil); display:flex; gap:6px; align-items:center; margin-right:6px; }
+  .scam { border-left:3px solid var(--red); padding:8px 12px; background:#F9E7E4; max-width:70ch; }
+  .scam strong { color:var(--red); display:block; margin-bottom:2px; }
+  .scam ul { margin:4px 0 0; padding-left:18px; font-size:14px; }
+
+  /* ---------- tabs ---------- */
+  .tabs { display:flex; gap:28px; border-bottom:1px solid var(--rule); margin-bottom:14px; align-items:flex-end; }
+  .tab { background:none; border:0; padding:8px 0 10px; font-weight:600; font-size:16px; color:var(--pencil); cursor:pointer; border-bottom:2px solid transparent; margin-bottom:-1px; }
+  .tab[aria-selected="true"] { color:var(--ink); border-bottom-color:var(--ink); }
+  .tab .n { font-weight:500; }
+  .tabs .tools { margin-left:auto; display:flex; gap:8px; padding-bottom:8px; }
+  .tabs .tools[hidden] { display:none; }
+  .panel { display:none; } .panel.on { display:block; }
+  .grid { height:460px; width:100%; }
+  .ag-root-wrapper, .ag-root-wrapper * { font-variant-numeric:normal !important; font-feature-settings:"tnum" 0 !important; }
+  .ag-cell-wrap-text { line-height:1.4 !important; padding-top:9px !important; padding-bottom:9px !important; word-break:break-word; }
+  .below { margin-top:10px; color:var(--pencil); font-size:13px; }
+  details summary { cursor:pointer; }
+  textarea { width:100%; height:110px; border:1px solid var(--rule); background:var(--sheet); border-radius:6px; padding:10px; margin:8px 0; resize:vertical; }
+  .form { display:grid; grid-template-columns:repeat(3, minmax(0,1fr)); gap:10px; margin-top:10px; }
+  .form label { display:flex; flex-direction:column; font-size:12px; color:var(--pencil); gap:4px; }
+  .form input { border:1px solid var(--rule); background:var(--sheet); border-radius:6px; padding:8px 10px; color:var(--ink); font-size:14px; }
+  .form .wide { grid-column:span 2; }
+  .form .end { align-self:end; }
+
+  /* ---------- stamps: the one memorable thing ---------- */
+  .stamp { display:inline-block; font-weight:800; font-size:11px; letter-spacing:.09em; text-transform:uppercase; padding:2px 7px 1px; border:2px solid currentColor; border-radius:3px; transform:rotate(-3deg); line-height:1.35; white-space:nowrap; }
+  .stamp.paid { color:var(--paid); background:rgba(31,107,69,.08); }
+  .stamp.approved { color:var(--paid); border-style:dashed; }
+  .stamp.held { color:var(--held); }
+  .stamp.rejected, .stamp.failed { color:var(--red); }
+  .stamp.reading { color:var(--pencil); border-style:dotted; }
+  .stamp.scam { color:#fff; background:var(--red); border-color:var(--red); transform:rotate(2deg); }
+  .stamp.check { color:var(--held); border-width:1px; font-weight:700; transform:none; }
+  .stamp.sent { color:var(--ink); }
+  .stamp-wrap { display:flex; flex-wrap:wrap; gap:6px; align-items:center; padding-top:2px; }
+  .payout { display:block; color:var(--pencil); font-size:12px; margin-top:3px; }
+  @keyframes thunk { 0% { transform:scale(1.6) rotate(-8deg); opacity:0; } 60% { transform:scale(.95) rotate(-3deg); opacity:1; } 100% { transform:scale(1) rotate(-3deg); } }
+  .stamp.fresh { animation:thunk .35s ease-out; }
+
+  /* ---------- chat ---------- */
+  aside header { padding:22px 22px 12px; border-bottom:1px solid var(--rule); }
+  aside header h2 { margin:0; }
+  aside header p { margin:4px 0 0; font-size:13px; color:var(--pencil); }
+  .log { flex:1; overflow:auto; padding:18px 22px; display:flex; flex-direction:column; gap:14px; }
+  .msg { max-width:100%; white-space:pre-wrap; word-break:break-word; font-size:14px; }
+  .msg.user { align-self:flex-end; background:var(--ink); color:var(--sheet); padding:8px 12px; border-radius:10px 10px 2px 10px; max-width:88%; }
+  .msg.assistant { align-self:flex-start; border-left:2px solid var(--paid); padding:2px 0 2px 12px; }
+  .msg .used { display:block; color:var(--pencil); font-size:12px; margin-top:6px; }
+  .msg a { color:var(--paid); }
+  .working { color:var(--pencil); }
+  .working .dots span { display:inline-block; width:6px; height:6px; border-radius:50%; background:var(--paid); margin-right:4px; animation:blink 1.2s infinite; }
+  .working .dots span:nth-child(2) { animation-delay:.2s; } .working .dots span:nth-child(3) { animation-delay:.4s; }
+  @keyframes blink { 0%,80%,100% { opacity:.2; } 40% { opacity:1; } }
+  .suggest { padding:0 22px 10px; display:flex; flex-wrap:wrap; gap:6px; }
+  .suggest button { border:1px solid var(--rule); background:var(--ledger); border-radius:999px; padding:4px 10px; font-size:12px; cursor:pointer; color:var(--ink); }
+  .ask { display:flex; gap:8px; padding:12px 22px 22px; border-top:1px solid var(--rule); }
+  .ask input { flex:1; border:1px solid var(--rule); background:#fff; border-radius:6px; padding:9px 11px; font-size:14px; }
+
+  /* ---------- status line, toasts, dialogs ---------- */
+  .status { position:fixed; left:50%; top:14px; transform:translateX(-50%); background:var(--ink); color:var(--sheet); padding:8px 16px; border-radius:999px; font-size:14px; display:none; align-items:center; gap:10px; z-index:40; box-shadow:0 6px 24px rgba(23,35,59,.25); }
+  .status.on { display:flex; }
+  .status::before { content:''; width:12px; height:12px; border:2px solid var(--sheet); border-top-color:transparent; border-radius:50%; animation:spin .8s linear infinite; }
   @keyframes spin { to { transform:rotate(360deg); } }
-  #gate { position:fixed; inset:0; background:rgba(5,6,9,.82); display:none; align-items:center; justify-content:center; z-index:100; }
-  #gate form { background:var(--panel); border:1px solid var(--line); border-radius:12px; padding:22px; width:360px; display:flex; flex-direction:column; gap:10px; }
-  #gate h2 { margin:0; font-size:18px; } #gate input { padding:9px; border-radius:6px; border:1px solid var(--line); background:#0f1115; color:var(--text); font:inherit; }
-  .gate-msg { color:var(--bad); font-size:12px; min-height:14px; }
-  #lock { margin-left:12px; }
-  .toast { position:fixed; right:20px; bottom:20px; background:#1d2230; border:1px solid var(--line); border-left:4px solid var(--ok); color:var(--text); padding:10px 14px; border-radius:8px; max-width:420px; font-size:13px; opacity:0; transform:translateY(10px); transition:all .25s; z-index:50; }
-  .toast.show { opacity:1; transform:none; } .toast.bad { border-left-color:var(--bad); }
-  body.working button:not(#detail-close) { opacity:.55; pointer-events:none; }
-  .form { display:grid; grid-template-columns: 1fr 1fr; gap:8px; margin-top:8px; } .form input { padding:7px; border-radius:6px; border:1px solid var(--line); background:#0f1115; color:var(--text); font:inherit; }
-  .form .full { grid-column: 1 / -1; }
-  main { display:grid; grid-template-columns: 1fr 380px; gap:16px; padding:16px 20px; }
-  section { background:var(--panel); border:1px solid var(--line); border-radius:10px; padding:12px; }
-  section h2 { font-size:13px; text-transform:uppercase; letter-spacing:.8px; color:var(--muted); margin:0 0 10px; display:flex; align-items:center; gap:10px; }
-  .stack { display:flex; flex-direction:column; gap:16px; min-width:0; }
-  .toolbar { display:flex; gap:8px; flex-wrap:wrap; margin-left:auto; }
-  button { background:#232838; color:var(--text); border:1px solid var(--line); border-radius:6px; padding:6px 10px; cursor:pointer; font:inherit; font-size:12px; }
-  button.primary { background:var(--accent); color:#111; border-color:transparent; font-weight:600; }
-  button.ok { border-color:var(--ok); color:var(--ok); } button.bad { border-color:var(--bad); color:var(--bad); }
-  button:disabled { opacity:.5; cursor:default; }
-  .grid { height:260px; width:100%; }
-  .grid.tall { height:440px; }
-  .queue { display:flex; flex-direction:column; gap:8px; max-height:360px; overflow:auto; }
-  .card { border:1px solid var(--line); border-radius:8px; padding:10px; background:#12151c; }
-  .card b { font-size:14px; } .card .why { color:var(--warn); font-size:12px; margin:6px 0; }
-  .card .row { display:flex; gap:6px; align-items:center; flex-wrap:wrap; }
-  .card label { font-size:12px; color:var(--muted); }
-  .chat { display:flex; flex-direction:column; height:460px; }
-  .log { flex:1; overflow:auto; display:flex; flex-direction:column; gap:8px; padding:4px; }
-  .msg { padding:8px 10px; border-radius:8px; max-width:95%; white-space:pre-wrap; word-break:break-word; }
-  .msg.user { align-self:flex-end; background:#2a3144; } .msg.assistant { align-self:flex-start; background:#1d2230; border:1px solid var(--line); }
-  .chat form { display:flex; gap:6px; margin-top:8px; } .chat input { flex:1; padding:8px; border-radius:6px; border:1px solid var(--line); background:#0f1115; color:var(--text); font:inherit; }
-  textarea { width:100%; height:90px; background:#0f1115; color:var(--text); border:1px solid var(--line); border-radius:6px; padding:8px; font:12px/1.4 ui-monospace, monospace; }
-  .pill { display:inline-block; margin:2px 0; padding:1px 8px; border-radius:999px; font-size:11px; font-weight:600; }
-  .s-approved{background:#1b3a2a;color:var(--ok)} .s-paid{background:#1b3a2a;color:var(--ok)} .s-needs_approval{background:#3a2f12;color:var(--warn)}
-  .s-rejected{background:#3a1b1b;color:var(--bad)} .s-failed{background:#3a1b1b;color:var(--bad)} .s-paying{background:#1f2a3a;color:#7fb6ff} .s-extracted,.s-received{background:#232838;color:var(--muted)}
-  .s-SENT,.s-UNPAID{background:#1f2a3a;color:#7fb6ff} .s-PAID{background:#1b3a2a;color:var(--ok)} .s-DRAFT{background:#232838;color:var(--muted)}
-  .hint { color:var(--muted); font-size:12px; }
-  .risk-high { background:#4a1515; color:#ff8a8a; border:1px solid #ff5c5c; } .risk-med { background:#3a2f12; color:var(--warn); }
-  .card.scam { border-color:var(--bad); background:#1d1012; } .scam-box { background:#3a1414; border:1px solid #ff5c5c; color:#ffb3b3; border-radius:6px; padding:8px; margin:6px 0; font-size:12px; }
-  .scam-box b { color:#ff8a8a; display:block; margin-bottom:4px; } .scam-box ul { margin:0; padding-left:16px; }
-  a { color:#7fb6ff; }
-  .ag-cell-wrap-text { line-height:1.4 !important; padding-top:8px !important; padding-bottom:8px !important; word-break:break-word; }
-  #detail table.kv { width:100%; border-collapse:collapse; font-size:13px; } #detail th { text-align:left; color:var(--muted); font-weight:500; padding:3px 10px 3px 0; white-space:nowrap; vertical-align:top; width:140px; }
-  #detail td { padding:3px 0; white-space:pre-wrap; word-break:break-word; } #detail pre { background:#0f1115; border:1px solid var(--line); border-radius:6px; padding:10px; white-space:pre-wrap; word-break:break-word; font-size:12px; max-height:360px; overflow:auto; }
-  #detail h4 { margin:10px 0 4px; color:var(--muted); font-size:12px; text-transform:uppercase; } #detail h2 button { margin-left:auto; }
-  @media (max-width:1100px){ main{grid-template-columns:1fr} }
+  .toast { position:fixed; left:24px; bottom:24px; background:var(--sheet); border:1px solid var(--rule); border-left:4px solid var(--paid); padding:12px 16px; border-radius:6px; max-width:440px; font-size:14px; z-index:50; box-shadow:0 8px 28px rgba(23,35,59,.18); }
+  .toast.bad { border-left-color:var(--red); }
+
+  dialog { border:1px solid var(--rule); border-radius:8px; padding:0; background:var(--sheet); color:var(--ink); max-width:min(760px, 92vw); width:100%; }
+  dialog::backdrop { background:rgba(23,35,59,.45); }
+  .dlg { padding:22px 26px; }
+  .dlg h3 { margin:0 0 12px; font-size:20px; display:flex; gap:12px; align-items:center; }
+  .dlg h3 .x { margin-left:auto; }
+  .kv { width:100%; border-collapse:collapse; font-size:14px; margin-bottom:12px; }
+  .kv th { text-align:left; color:var(--pencil); font-weight:500; padding:4px 14px 4px 0; vertical-align:top; width:150px; white-space:nowrap; }
+  .kv td { padding:4px 0; white-space:pre-wrap; word-break:break-word; border-bottom:1px solid var(--rule); }
+  .paper { background:#fff; border:1px solid var(--rule); padding:16px 18px; white-space:pre-wrap; word-break:break-word; font-size:13px; line-height:1.55; max-height:340px; overflow:auto; }
+  .dlg h4 { margin:14px 0 6px; font-size:14px; color:var(--pencil); font-weight:600; }
+
+  .gate { max-width:400px; }
+  .gate p { color:var(--pencil); font-size:14px; margin:0 0 14px; }
+  .gate input { width:100%; border:1px solid var(--rule); border-radius:6px; padding:10px 12px; background:#fff; margin-bottom:6px; }
+  .gate .err { color:var(--red); font-size:13px; min-height:18px; margin-bottom:8px; }
+
+  body.working .btn, body.working .suggest button { pointer-events:none; opacity:.5; }
+
+  @media (max-width:1080px) {
+    .app { grid-template-columns:1fr; }
+    aside { position:static; height:auto; border-left:0; border-top:1px solid var(--rule); }
+    .log { max-height:420px; }
+    main { padding:22px 20px 40px; }
+    .summary { font-size:26px; }
+    .held { grid-template-columns:1fr; } .held .ctl { grid-row:auto; grid-column:1; flex-wrap:wrap; }
+    .form { grid-template-columns:1fr 1fr; }
+  }
+  @media (prefers-reduced-motion:reduce) { *, *::before { animation:none !important; transition:none !important; } }
 </style>
 </head>
 <body>
-<div id="gate"><form id="gate-form">
-  <h2>Kassa demo</h2>
-  <p class="hint">This demo uses a real LLM and the PayPal sandbox. Enter the access key you were given. It is stored only in this browser.</p>
+<div class="status" id="status" role="status" aria-live="polite"></div>
+
+<dialog id="gate"><form class="dlg gate" id="gate-form" method="dialog">
+  <h3>Kassa demo</h3>
+  <p>This demo runs a real language model and the PayPal sandbox. Enter the access key you were given. It stays in this browser.</p>
   <input id="gate-key" type="password" placeholder="Access key" autocomplete="current-password" required>
-  <div id="gate-msg" class="gate-msg"></div>
-  <button class="primary">Enter</button>
-</form></div>
-<header>
-  <h1>Kassa <span>·</span> agentic AP/AR on PayPal</h1>
-  <div class="busy" id="busy"></div>
-  <div class="meta" id="meta">…</div><button id="lock" title="Forget the access key in this browser">Lock</button>
-</header>
+  <div class="err" id="gate-err"></div>
+  <button class="btn solid" type="submit">Open Kassa</button>
+</form></dialog>
+
+<dialog id="detail"><div class="dlg" id="detail-body"></div></dialog>
+
+<div class="app">
 <main>
-  <div class="stack">
-    <section>
-      <h2>Inbox → supplier bills <span class="hint">click a row for details</span>
-        <div class="toolbar">
-          <button id="btn-samples" class="primary">Load sample inbox</button>
-          <input type="file" id="file" multiple style="display:none">
-          <button id="btn-upload">Upload .txt / .eml / .pdf</button>
-          <button id="btn-pay-approved" class="ok">Pay all approved</button>
-          <button id="btn-refresh">Refresh PayPal status</button>
-          <button id="btn-reset" class="bad">Reset demo</button>
-        </div>
-      </h2>
-      <div id="bills" class="grid tall"></div>
-      <details style="margin-top:8px"><summary class="hint">Paste an invoice as text</summary>
-        <textarea id="paste" placeholder="From: Supplier <billing@…>&#10;Invoice number: …&#10;Total EUR 123.45"></textarea>
-        <button id="btn-paste">Send to agent</button>
-      </details>
-    </section>
-    <section>
-      <h2>Customer invoices (PayPal Invoicing)
-        <div class="toolbar"><button id="btn-sample-invoices" class="primary">Load sample invoices</button><button id="btn-new-invoice">New invoice</button></div>
-      </h2>
-      <div id="invoices" class="grid"></div>
-      <details id="invoice-form" style="margin-top:8px"><summary class="hint">New invoice: fill the form, or just ask in chat: “invoice Fläkt pilot 15000 EUR to buyer@example.com, due 14 days”</summary>
-        <form class="form" id="form-invoice">
-          <input name="customer_name" placeholder="Customer name" value="Acme Oy" required>
-          <input name="customer_email" placeholder="Customer email (use the sandbox personal account to see it paid)" required>
-          <input name="item" placeholder="Line item" value="SafeSkillVR pilot" required>
-          <input name="amount" type="number" step="0.01" min="1" placeholder="Amount" value="1500" required>
-          <input name="due_in_days" type="number" min="1" value="14" placeholder="Due in days">
-          <input name="memo" placeholder="Memo (optional)">
-          <button class="primary full">Create and send via PayPal</button>
-        </form>
-      </details>
-    </section>
-    <section id="detail" style="display:none"></section>
-    <section>
-      <h2>Audit log <span class="hint">every tool call, with the agent's reason · click a row for full input/output</span></h2>
-      <div id="audit" class="grid"></div>
-    </section>
+  <div class="top">
+    <div class="brand">Kassa</div>
+    <div class="who" id="who"></div>
+    <div class="spacer"></div>
+    <button class="linkbtn" id="lock" title="Forget the access key in this browser">Lock</button>
   </div>
-  <div class="stack">
-    <section>
-      <h2>Approval queue <span class="hint" id="queue-count"></span></h2>
-      <div id="queue" class="queue"><div class="hint">Nothing waiting.</div></div>
-    </section>
-    <section class="chat">
-      <h2>Talk to Kassa</h2>
-      <div id="log" class="log"></div>
-      <form id="chat"><input id="chat-in" placeholder="pay approved bills · what is overdue? · invoice …" autocomplete="off"><button class="primary">Send</button></form>
-    </section>
+
+  <p class="summary empty" id="summary">No bills yet.</p>
+  <div class="actions">
+    <button class="btn solid" id="btn-samples">Load sample inbox</button>
+    <button class="btn green" id="btn-pay">Pay approved bills</button>
+    <button class="btn quiet" id="btn-upload">Upload invoices</button>
+    <input type="file" id="file" multiple accept=".txt,.eml,.pdf" hidden>
+    <button class="btn quiet" id="btn-refresh">Check PayPal status</button>
+    <button class="btn quiet" id="btn-reset">Start over</button>
+  </div>
+
+  <section class="needs" aria-labelledby="needs-h">
+    <h2 id="needs-h">Needs you <span class="count" id="needs-n"></span></h2>
+    <div id="queue"><p class="none">Nothing is waiting. Kassa pays trusted suppliers under the limit on its own and brings everything else here.</p></div>
+  </section>
+
+  <div class="tabs" role="tablist">
+    <button class="tab" role="tab" aria-selected="true" data-tab="bills">Bills to pay <span class="n" id="n-bills"></span></button>
+    <button class="tab" role="tab" aria-selected="false" data-tab="invoices">Invoices sent <span class="n" id="n-invoices"></span></button>
+    <button class="tab" role="tab" aria-selected="false" data-tab="audit">Activity <span class="n" id="n-audit"></span></button>
+    <div class="tools" id="tools-invoices" hidden>
+      <button class="btn solid" id="btn-sample-invoices">Send sample invoices</button>
+      <button class="btn quiet" id="btn-new-invoice">New invoice</button>
+    </div>
+  </div>
+
+  <div class="panel on" id="panel-bills">
+    <div id="grid-bills" class="grid"></div>
+    <details class="below"><summary>Paste an invoice as text</summary>
+      <textarea id="paste" placeholder="From: Supplier &lt;billing@…&gt;&#10;Invoice number: …&#10;Total EUR 123.45"></textarea>
+      <button class="btn solid" id="btn-paste">Send to Kassa</button>
+    </details>
+  </div>
+
+  <div class="panel" id="panel-invoices">
+    <div id="grid-invoices" class="grid"></div>
+    <details class="below" id="invoice-form"><summary>New invoice</summary>
+      <form class="form" id="form-invoice">
+        <label>Customer<input name="customer_name" value="Acme Oy" required></label>
+        <label class="wide">Customer email<input name="customer_email" placeholder="Use the sandbox personal account to see it paid" required></label>
+        <label class="wide">What for<input name="item" value="SafeSkillVR pilot" required></label>
+        <label>Amount, EUR<input name="amount" type="number" step="0.01" min="1" value="1500" required></label>
+        <label>Due in days<input name="due_in_days" type="number" min="1" value="14"></label>
+        <label>Note<input name="memo" placeholder="Optional"></label>
+        <button class="btn solid end" type="submit">Send invoice</button>
+      </form>
+    </details>
+  </div>
+
+  <div class="panel" id="panel-audit">
+    <div id="grid-audit" class="grid"></div>
+    <p class="below">Every action Kassa or a person takes, with the reason given at the time. Click a row to see the full record.</p>
   </div>
 </main>
+
+<aside aria-label="Ask Kassa">
+  <header><h2>Ask Kassa</h2><p>It can list, pay approved bills and send invoices. It cannot approve payments.</p></header>
+  <div class="log" id="log"></div>
+  <div class="suggest" id="suggest">
+    <button>What is waiting for me and why?</button>
+    <button>Pay the approved bills</button>
+    <button>Invoice Acme Oy 1500 EUR for the pilot, due in 14 days</button>
+    <button>How much did we pay Pixelforge?</button>
+  </div>
+  <form class="ask" id="chat"><input id="chat-in" placeholder="Ask about bills or send an invoice" autocomplete="off" aria-label="Message to Kassa"><button class="btn solid" type="submit">Send</button></form>
+</aside>
+</div>
+
 <script>
+/* ---------- access key and API ---------- */
 const KEY_NAME = 'kassa_access_key';
 const getKey = () => localStorage.getItem(KEY_NAME) || '';
-const api = (p, o={}) => fetch('/api'+p, {...o, headers:{'Content-Type':'application/json', 'X-Kassa-Key': getKey(), ...(o.headers||{})}}).then(async r => {
-  const j = await r.json().catch(()=>({}));
-  if (r.status === 401) { askKey('Wrong or missing access key.'); throw new Error('access key required'); }
-  if(!r.ok) throw new Error(j.error || JSON.stringify(j)); return j; });
-function askKey(msg){
-  const m = document.getElementById('gate'); document.getElementById('gate-msg').textContent = msg || '';
-  m.style.display = 'flex'; const i = document.getElementById('gate-key'); i.value = ''; setTimeout(() => i.focus(), 50);
+const $ = id => document.getElementById(id);
+const esc = s => String(s ?? '').replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+const md = s => esc(s).replace(/\*\*(.+?)\*\*/g, '<b>$1</b>').replace(/\[([^\]]+)\]\((https?:[^)\s]+)\)/g, '<a href="$2" target="_blank" rel="noopener">$1</a>').replace(/(^|\s)(https?:\/\/[^\s<]+)/g, '$1<a href="$2" target="_blank" rel="noopener">$2</a>').replace(/^- /gm, '• ');
+const money = (v, c) => v == null ? '' : new Intl.NumberFormat('en-IE', {style:'currency', currency:c || 'EUR'}).format(v);
+
+async function api(path, opts = {}) {
+  const r = await fetch('/api' + path, {...opts, headers:{'Content-Type':'application/json', 'X-Kassa-Key': getKey(), ...(opts.headers || {})}});
+  const j = await r.json().catch(() => ({}));
+  if (r.status === 401) { askKey('That key did not work. Check it and try again.'); throw new Error('Access key required.'); }
+  if (!r.ok) throw new Error(j.error || (j.body && j.body.message) || 'The server returned ' + r.status + '.');
+  return j;
 }
-const pill = s => `<span class="pill s-${s}">${s}</span>`;
-const riskBadge = b => b.risk_level === 'high' ? ' <span class="pill risk-high" title="' + esc((b.risk_signals||[]).join('; ')) + '">⚠ scam risk</span>' : (b.risk_level === 'medium' ? ' <span class="pill risk-med" title="' + esc((b.risk_signals||[]).join('; ')) + '">check</span>' : '');
-const money = (v,c) => v==null ? '' : new Intl.NumberFormat('fi-FI',{style:'currency',currency:c||'EUR'}).format(v);
-const fmtTs = t => t ? t.replace('T',' ').slice(0,19) : '';
+function askKey(msg) { $('gate-err').textContent = msg || ''; $('gate-key').value = ''; if (!$('gate').open) $('gate').showModal(); setTimeout(() => $('gate-key').focus(), 30); }
+$('gate-form').addEventListener('submit', async e => {
+  e.preventDefault(); const k = $('gate-key').value.trim(); if (!k) return;
+  localStorage.setItem(KEY_NAME, k);
+  try { await api('/config'); $('gate').close(); await load(); } catch (err) { localStorage.removeItem(KEY_NAME); }
+});
+$('gate').addEventListener('cancel', e => e.preventDefault());
+$('lock').onclick = () => { localStorage.removeItem(KEY_NAME); askKey(''); };
 
-const darkTheme = agGrid.themeQuartz.withPart(agGrid.colorSchemeDark).withParams({backgroundColor:'#12151c', headerBackgroundColor:'#171a21', borderColor:'#262b36', foregroundColor:'#e8eaf0', fontSize:12, rowHoverColor:'#1d2230', accentColor:'#ffc439'});
-const gridOpts = (cols, extra={}) => ({ theme: darkTheme, columnDefs: cols, rowData: [], defaultColDef:{sortable:true, filter:true, resizable:true, flex:1, minWidth:90}, tooltipShowDelay:200, animateRows:true, getRowId: p => String(p.data.id), ...extra });
-const billsGrid = agGrid.createGrid(document.getElementById('bills'), gridOpts([
-  {field:'id', headerName:'#', maxWidth:60, minWidth:56, filter:false},
-  {field:'supplier', headerName:'Supplier', minWidth:130, wrapText:true, autoHeight:true},
-  {field:'invoice_number', headerName:'Invoice №', minWidth:115, maxWidth:140},
-  {field:'due_date', headerName:'Due', minWidth:105, maxWidth:120},
-  {field:'amount', headerName:'Amount', valueFormatter:p=>money(p.value,p.data.currency), type:'rightAligned', filter:false, minWidth:100, maxWidth:120},
-  {field:'status', headerName:'Status', minWidth:150, maxWidth:190, wrapText:true, autoHeight:true, cellRenderer:p=>pill(p.value) + riskBadge(p.data) + (p.data.payout_status ? ` <span class="hint">${esc(p.data.payout_status)}</span>` : '')},
-  {field:'reason', headerName:'Why', minWidth:220, flex:3, wrapText:true, autoHeight:true},
-], {overlayNoRowsTemplate:'<div class="hint">No bills yet. Click <b>Load sample inbox</b> to let the agent read five sample invoices, or upload your own.</div>', onRowClicked: e => showDetail('Bill #'+e.data.id, e.data, ['raw_text'])}));
-const invGrid = agGrid.createGrid(document.getElementById('invoices'), gridOpts([
-  {field:'invoice_number', headerName:'Invoice №', minWidth:120},
-  {field:'customer_name', headerName:'Customer', minWidth:160},
-  {field:'customer_email', headerName:'Email', minWidth:200},
-  {field:'amount', headerName:'Amount', valueFormatter:p=>money(p.value,p.data.currency), type:'rightAligned', filter:false, minWidth:120},
-  {field:'due_date', headerName:'Due', minWidth:110},
-  {field:'status', headerName:'PayPal status', minWidth:130, cellRenderer:p=>pill(p.value||'')},
-  {field:'pay_url', headerName:'Link', minWidth:80, maxWidth:90, filter:false, sortable:false, cellRenderer:p=>p.value?`<a href="${p.value}" target="_blank">open</a>`:''},
-], {overlayNoRowsTemplate:'<div class="hint">No invoices issued yet. Click <b>Load sample invoices</b>, <b>New invoice</b>, or ask Kassa in chat.</div>'}));
-const auditGrid = agGrid.createGrid(document.getElementById('audit'), gridOpts([
-  {field:'ts', headerName:'Time', valueFormatter:p=>fmtTs(p.value), minWidth:170, maxWidth:190},
-  {field:'actor', headerName:'Actor', minWidth:100, maxWidth:120},
-  {field:'tool', headerName:'Tool', minWidth:180, maxWidth:220},
-  {field:'ok', headerName:'OK', width:64, minWidth:64, maxWidth:64, flex:0, filter:false, sortable:false, resizable:false, cellRenderer:p=>p.value?'✓':'<span style="color:var(--bad)">✗</span>'},
-  {field:'reason', headerName:'Reason', minWidth:220, flex:2, wrapText:true, autoHeight:true},
-  {field:'input', headerName:'Input', minWidth:200, tooltipField:'input'},
-  {field:'output', headerName:'Output', minWidth:200, tooltipField:'output'},
-], {overlayNoRowsTemplate:'<div class="hint">Every action the agent or a human takes will be listed here with its reason.</div>', onRowClicked: e => showDetail('Audit #'+e.data.id+' · '+e.data.tool, e.data, ['input','output'])}));
+/* ---------- status line and toasts ---------- */
+function working(text) { const s = $('status'); if (text) { s.textContent = text; s.classList.add('on'); document.body.classList.add('working'); } else { s.classList.remove('on'); document.body.classList.remove('working'); } }
+function toast(text, bad) { const t = document.createElement('div'); t.className = 'toast' + (bad ? ' bad' : ''); t.setAttribute('role', 'status'); t.textContent = text; document.body.appendChild(t); setTimeout(() => t.remove(), bad ? 8000 : 4500); }
+async function act(fn, text, done) { working(text); try { const r = await fn(); if (done) toast(typeof done === 'function' ? done(r) : done); } catch (err) { toast(err.message, true); } finally { working(null); } await load(); }
 
-async function load() {
-  const [cfg, bills, invs, audit, chat] = await Promise.all([api('/config'), api('/bills'), api('/invoices'), api('/audit'), api('/chat')]);
-  CFG = cfg; const ce = document.querySelector('#form-invoice [name=customer_email]'); if (ce && !ce.value && cfg.demo_customer_email) ce.value = cfg.demo_customer_email;
-  document.getElementById('meta').textContent = `${cfg.merchant_name} · ${cfg.env} · PayPal ${cfg.paypal?'connected':'not configured'} · LLM: ${cfg.llm} · auto-pay ≤ ${cfg.auto_pay_limit} ${cfg.currency}`;
-  BILLS = bills;
-  billsGrid.setGridOption('rowData', bills);
-  invGrid.setGridOption('rowData', invs);
-  auditGrid.setGridOption('rowData', audit);
-  renderQueue(bills.filter(b => b.status==='needs_approval' || b.status==='failed'));
-  renderChat(chat);
+/* ---------- stamps ---------- */
+const STAMP = {paid:['paid','Paid'], approved:['approved','Approved'], needs_approval:['held','Held'], rejected:['rejected','Rejected'], failed:['failed','Failed'], paying:['reading','Paying'], received:['reading','Reading'], extracted:['reading','Reading']};
+const INV = {SENT:['sent','Sent'], UNPAID:['sent','Unpaid'], PAID:['paid','Paid'], MARKED_AS_PAID:['paid','Paid'], DRAFT:['reading','Draft'], CANCELLED:['rejected','Cancelled'], PARTIALLY_PAID:['approved','Part paid']};
+const seen = new Map();
+function stampHtml(kind, label, key, val) { const fresh = key && seen.has(key) && seen.get(key) !== val; if (key) seen.set(key, val); return `<span class="stamp ${kind}${fresh ? ' fresh' : ''}">${esc(label)}</span>`; }
+function billStatus(b) {
+  const [k, l] = STAMP[b.status] || ['reading', b.status];
+  let h = stampHtml(k, l, 'b' + b.id, b.status);
+  if (b.risk_level === 'high') h += `<span class="stamp scam" title="${esc((b.risk_signals || []).join('; '))}">Scam risk</span>`;
+  else if (b.risk_level === 'medium') h += `<span class="stamp check" title="${esc((b.risk_signals || []).join('; '))}">Check</span>`;
+  const po = b.payout_status ? `<span class="payout" title="${b.payout_status === 'UNCLAIMED' ? 'The recipient has no PayPal sandbox account. The money waits for them. This is normal in the sandbox.' : ''}">PayPal: ${esc(b.payout_status.toLowerCase())}</span>` : '';
+  return `<div class="stamp-wrap">${h}</div>${po}`;
+}
+
+/* ---------- grids ---------- */
+const theme = agGrid.themeQuartz.withParams({
+  fontFamily:"'Schibsted Grotesk', system-ui, sans-serif", fontSize:14, backgroundColor:'#F8FAF6', foregroundColor:'#17233B',
+  headerBackgroundColor:'#EDF2EA', headerTextColor:'#5E6B66', headerFontWeight:600, borderColor:'#D3DDD0',
+  accentColor:'#1F6B45', rowHoverColor:'#EEF4EC', wrapperBorderRadius:4, borderRadius:4, spacing:7,
+});
+const base = (cols, extra = {}) => ({ theme, columnDefs:cols, rowData:[], defaultColDef:{sortable:true, resizable:true, flex:1, minWidth:90, suppressHeaderMenuButton:true}, tooltipShowDelay:250, getRowId:p => String(p.data.id), animateRows:true, ...extra });
+
+const billsGrid = agGrid.createGrid($('grid-bills'), base([
+  {field:'supplier', headerName:'Supplier', minWidth:150, flex:1.4, wrapText:true, autoHeight:true, valueFormatter:p => p.value || 'Unknown sender'},
+  {field:'invoice_number', headerName:'Invoice', minWidth:130, maxWidth:150, wrapText:true, autoHeight:true},
+  {field:'due_date', headerName:'Due', minWidth:122, maxWidth:126},
+  {field:'amount', headerName:'Amount', type:'rightAligned', minWidth:110, maxWidth:130, valueFormatter:p => money(p.value, p.data.currency), cellStyle:{fontWeight:600}},
+  {field:'status', headerName:'Status', minWidth:170, maxWidth:210, wrapText:true, autoHeight:true, cellRenderer:p => billStatus(p.data)},
+  {field:'reason', headerName:'Why', minWidth:240, flex:3, wrapText:true, autoHeight:true},
+], {overlayNoRowsTemplate:'<span style="color:#5E6B66">No bills yet. Load the sample inbox and Kassa will read five supplier invoices.</span>',
+    onRowClicked:e => showDetail(e.data.supplier || 'Bill', billRows(e.data), e.data.raw_text)}));
+
+const invGrid = agGrid.createGrid($('grid-invoices'), base([
+  {field:'invoice_number', headerName:'Invoice', minWidth:100, maxWidth:120},
+  {field:'customer_name', headerName:'Customer', minWidth:160, flex:1.3},
+  {field:'customer_email', headerName:'Sent to', minWidth:200, flex:1.4},
+  {field:'amount', headerName:'Amount', type:'rightAligned', minWidth:120, maxWidth:140, valueFormatter:p => money(p.value, p.data.currency), cellStyle:{fontWeight:600}},
+  {field:'due_date', headerName:'Due', minWidth:122, maxWidth:126},
+  {field:'status', headerName:'Status', minWidth:120, maxWidth:150, cellRenderer:p => { const [k, l] = INV[p.value] || ['reading', p.value || '']; return `<div class="stamp-wrap">${stampHtml(k, l, 'i' + p.data.id, p.value)}</div>`; }},
+  {field:'pay_url', headerName:'PayPal page', minWidth:120, maxWidth:140, sortable:false, cellRenderer:p => p.value ? `<a href="${esc(p.value)}" target="_blank" rel="noopener">Open</a>` : ''},
+], {overlayNoRowsTemplate:'<span style="color:#5E6B66">No invoices sent yet. Send the sample invoices, write a new one, or ask Kassa.</span>'}));
+
+const auditGrid = agGrid.createGrid($('grid-audit'), base([
+  {field:'ts', headerName:'When', minWidth:150, maxWidth:170, valueFormatter:p => p.value ? new Date(p.value).toLocaleString('en-GB', {day:'2-digit', month:'short', hour:'2-digit', minute:'2-digit', second:'2-digit'}) : ''},
+  {field:'actor', headerName:'Who', minWidth:90, maxWidth:100, valueFormatter:p => p.value === 'agent' ? 'Kassa' : p.value === 'human' ? 'Person' : p.value},
+  {field:'tool', headerName:'Action', minWidth:170, maxWidth:210, valueFormatter:p => (p.value || '').replace(/_/g, ' ')},
+  {field:'ok', headerName:'Result', minWidth:96, maxWidth:110, cellRenderer:p => p.value ? '<span style="color:#1F6B45;font-weight:600">Done</span>' : '<span style="color:#B42318;font-weight:600">Refused</span>'},
+  {field:'reason', headerName:'Reason', minWidth:260, flex:3, wrapText:true, autoHeight:true},
+], {overlayNoRowsTemplate:'<span style="color:#5E6B66">Nothing has happened yet.</span>',
+    onRowClicked:e => showDetail((e.data.tool || '').replace(/_/g, ' '), [['When', e.data.ts], ['Who', e.data.actor], ['Result', e.data.ok ? 'Done' : 'Refused'], ['Reason', e.data.reason]], null, [['Input', e.data.input], ['Output', e.data.output]])}));
+
+/* ---------- narrow screens: keep only the columns that matter ---------- */
+function fitColumns() {
+  const narrow = window.innerWidth < 760;
+  billsGrid.setColumnsVisible(['invoice_number', 'due_date'], !narrow);
+  invGrid.setColumnsVisible(['customer_email', 'due_date'], !narrow);
+  auditGrid.setColumnsVisible(['actor', 'ok'], !narrow);
+}
+fitColumns(); window.addEventListener('resize', fitColumns);
+
+/* ---------- tabs ---------- */
+document.querySelectorAll('.tab').forEach(t => t.onclick = () => {
+  document.querySelectorAll('.tab').forEach(x => x.setAttribute('aria-selected', x === t ? 'true' : 'false'));
+  document.querySelectorAll('.panel').forEach(p => p.classList.toggle('on', p.id === 'panel-' + t.dataset.tab));
+  $('tools-invoices').hidden = t.dataset.tab !== 'invoices';
+});
+
+/* ---------- detail dialog ---------- */
+function billRows(b) {
+  return [['Supplier', b.supplier], ['Pay to', b.supplier_email], ['Invoice', b.invoice_number], ['Invoice date', b.invoice_date], ['Due', b.due_date],
+          ['Amount', money(b.amount, b.currency)], ['Status', b.status], ['Why', b.reason], ['Fraud risk', b.risk_level && b.risk_level !== 'low' ? b.risk_level + ': ' + (b.risk_signals || []).join('; ') : 'low'],
+          ['Read with confidence', b.confidence], ['PayPal payout', b.payout_batch_id ? b.payout_batch_id + ' (' + (b.payout_status || '') + ')' : ''], ['Source', b.source]];
+}
+const pretty = v => { if (v == null) return ''; if (typeof v !== 'string') return JSON.stringify(v, null, 2); try { return JSON.stringify(JSON.parse(v), null, 2); } catch { return v; } };
+function showDetail(title, rows, paper, blocks = []) {
+  const kv = rows.filter(([, v]) => v !== null && v !== undefined && v !== '').map(([k, v]) => `<tr><th>${esc(k)}</th><td>${esc(v)}</td></tr>`).join('');
+  $('detail-body').innerHTML = `<h3>${esc(title)}<button class="btn quiet x" id="dlg-close">Close</button></h3><table class="kv">${kv}</table>`
+    + (paper ? `<h4>The invoice as Kassa received it</h4><div class="paper">${esc(paper)}</div>` : '')
+    + blocks.filter(([, v]) => v).map(([k, v]) => `<h4>${esc(k)}</h4><div class="paper">${esc(pretty(v))}</div>`).join('');
+  $('detail').showModal(); $('dlg-close').onclick = () => $('detail').close();
+}
+$('detail').addEventListener('click', e => { if (e.target === $('detail')) $('detail').close(); });
+
+/* ---------- summary and queue ---------- */
+let BILLS = [], CFG = {};
+function renderSummary(bills) {
+  const paid = bills.filter(b => b.status === 'paid'), approved = bills.filter(b => b.status === 'approved');
+  const held = bills.filter(b => b.status === 'needs_approval' || b.status === 'failed');
+  const sum = a => a.reduce((x, b) => x + (b.amount || 0), 0);
+  const el = $('summary');
+  if (!bills.length) { el.className = 'summary empty'; el.textContent = 'No bills yet. Load the sample inbox and watch Kassa read five supplier invoices.'; return; }
+  el.className = 'summary';
+  const parts = [];
+  if (paid.length) parts.push(`paid ${paid.length} ${paid.length === 1 ? 'bill' : 'bills'} for <span class="amt">${money(sum(paid))}</span>`);
+  if (approved.length) parts.push(`has ${approved.length} ready to pay`);
+  const holding = held.length ? `is holding ${held.length} for you` : 'needs nothing from you';
+  el.innerHTML = 'Kassa ' + (parts.length ? parts.join(', ') + ' and ' : '') + holding + '.';
 }
 function renderQueue(items) {
-  const q = document.getElementById('queue');
-  document.getElementById('queue-count').textContent = items.length ? `${items.length} waiting` : '';
-  if (!items.length) { q.innerHTML = '<div class="hint">Nothing waiting. Policy auto-approves known suppliers under the limit.</div>'; return; }
+  $('needs-n').textContent = items.length ? items.length : '';
+  const q = $('queue');
+  if (!items.length) { q.innerHTML = '<p class="none">Nothing is waiting. Kassa pays trusted suppliers under the limit on its own and brings everything else here.</p>'; return; }
   q.innerHTML = items.map(b => `
-    <div class="card${b.risk_level==='high' ? ' scam' : ''}">
-      <b>#${b.id} ${b.supplier||'(unknown supplier)'}</b> — ${money(b.amount,b.currency)} ${b.invoice_number?`· ${b.invoice_number}`:''}<br>
-      <span class="hint">${b.supplier_email||'no PayPal email'} · due ${b.due_date||'?'}</span>
-      ${b.risk_level==='high' ? `<div class="scam-box"><b>⚠ Possible scam. Do not pay without checking with the supplier by phone.</b><ul>${(b.risk_signals||[]).map(x => `<li>${esc(x)}</li>`).join('')}</ul></div>` : `<div class="why">⚠ ${esc(b.reason||'')}</div>`}
-      ${b.risk_level==='medium' ? `<div class="hint">Check: ${esc((b.risk_signals||[]).join('; '))}</div>` : ''}
-      <div class="row">
-        <button class="ok" data-act="approve" data-id="${b.id}">Approve</button>
-        <label><input type="checkbox" data-trust="${b.id}"> trust supplier</label>
-        <button class="bad" data-act="reject" data-id="${b.id}">Reject</button>
+    <div class="held">
+      <div class="who-line">${esc(b.supplier || 'Unknown sender')}<span class="amount">${money(b.amount, b.currency)}</span></div>
+      <div class="sub">${esc(b.supplier_email || 'no payment address')}${b.invoice_number ? ', invoice ' + esc(b.invoice_number) : ', no invoice number'}${b.due_date ? ', due ' + esc(b.due_date) : ''}</div>
+      ${b.risk_level === 'high'
+        ? `<div class="scam"><strong>This looks like a scam. Call the supplier on a number you already have before paying.</strong><ul>${(b.risk_signals || []).map(x => `<li>${esc(x)}</li>`).join('')}</ul></div>`
+        : `<div class="why">${esc(b.reason || '')}</div>`}
+      <div class="ctl">
+        <label><input type="checkbox" data-trust="${b.id}"> Trust this supplier</label>
+        <button class="btn green solid" data-act="approve" data-id="${b.id}">Approve</button>
+        <button class="btn red" data-act="reject" data-id="${b.id}">Reject</button>
       </div>
     </div>`).join('');
 }
+$('queue').onclick = e => {
+  const btn = e.target.closest('button[data-act]'); if (!btn) return;
+  const id = btn.dataset.id, bill = BILLS.find(b => String(b.id) === id);
+  if (btn.dataset.act === 'approve') {
+    if (bill && bill.risk_level === 'high' && !confirm('Kassa thinks this bill is a scam:\n\n- ' + (bill.risk_signals || []).join('\n- ') + '\n\nApprove it anyway?')) return;
+    const trust = document.querySelector(`input[data-trust="${id}"]`).checked;
+    act(() => api(`/bills/${id}/approve`, {method:'POST', body:JSON.stringify({trust_supplier:trust})}), 'Approving…', 'Approved. Pay it with “Pay approved bills”.');
+  } else {
+    const reason = prompt('Why reject this bill?', bill && bill.risk_level === 'high' ? 'Looks like a scam' : 'Not a valid invoice');
+    if (reason != null) act(() => api(`/bills/${id}/reject`, {method:'POST', body:JSON.stringify({reason})}), 'Rejecting…', 'Rejected.');
+  }
+};
+
+/* ---------- load everything ---------- */
+async function load() {
+  const [cfg, bills, invs, audit, chat] = await Promise.all([api('/config'), api('/bills'), api('/invoices'), api('/audit'), api('/chat')]);
+  CFG = cfg; BILLS = bills;
+  $('who').textContent = `${cfg.merchant_name}, PayPal ${cfg.env}, pays on its own up to ${money(cfg.auto_pay_limit, cfg.currency)}`;
+  const ce = document.querySelector('#form-invoice [name=customer_email]'); if (ce && !ce.value && cfg.demo_customer_email) ce.value = cfg.demo_customer_email;
+  billsGrid.setGridOption('rowData', bills); invGrid.setGridOption('rowData', invs); auditGrid.setGridOption('rowData', audit);
+  $('n-bills').textContent = bills.length || ''; $('n-invoices').textContent = invs.length || ''; $('n-audit').textContent = audit.length || '';
+  renderSummary(bills); renderQueue(bills.filter(b => b.status === 'needs_approval' || b.status === 'failed'));
+  if (!chatBusy) renderChat(chat);
+}
+
+/* ---------- actions ---------- */
+async function loadSamples() {
+  const samples = await api('/samples');
+  const names = new Set(samples.map(x => x.name));
+  if (BILLS.some(b => names.has(b.source))) {
+    if (confirm('The sample inbox is already here.\n\nOK: start over and load it fresh.\nCancel: load it again and watch Kassa reject the copies as duplicates.')) { working('Starting over…'); await api('/reset', {method:'POST'}); await load(); }
+  }
+  working('Adding the two suppliers the company already pays every month…');
+  await api('/samples/suppliers', {method:'POST'});
+  for (let i = 0; i < samples.length; i++) {
+    working(`Kassa is reading invoice ${i + 1} of ${samples.length}`);
+    await api('/bills/text', {method:'POST', body:JSON.stringify({text:samples[i].text, source:samples[i].name})});
+    await load();
+  }
+}
+$('btn-samples').onclick = () => act(loadSamples, 'Loading the sample inbox…', 'Done. Two bills are approved and ready to pay, two need you, one was a duplicate.');
+$('btn-pay').onclick = () => act(async () => {
+  const r = await api('/bills/pay-approved', {method:'POST'});
+  if (!r.length) throw new Error('No bills are approved yet. Approve one under “Needs you” first.');
+  const failed = r.filter(x => x.error);
+  if (failed.length) throw new Error(`Paid ${r.length - failed.length} of ${r.length}. ${failed[0].error}`);
+  return r;
+}, 'Paying through PayPal Payouts…', r => `Paid ${r.length} ${r.length === 1 ? 'bill' : 'bills'} through PayPal. Check status in a minute.`);
+$('btn-refresh').onclick = () => act(() => api('/refresh', {method:'POST'}), 'Checking PayPal…', 'Statuses updated from PayPal.');
+$('btn-reset').onclick = () => confirm('Clear all demo data and start over?') && act(() => api('/reset', {method:'POST'}), 'Starting over…', 'Cleared. Load the sample inbox to begin.');
+$('btn-upload').onclick = () => $('file').click();
+$('file').onchange = e => { const files = [...e.target.files]; if (!files.length) return; act(async () => {
+  const fd = new FormData(); files.forEach(f => fd.append('files', f));
+  const r = await fetch('/api/bills/upload', {method:'POST', body:fd, headers:{'X-Kassa-Key': getKey()}});
+  if (r.status === 401) { askKey('That key did not work.'); throw new Error('Access key required.'); }
+  if (!r.ok) throw new Error('Upload failed: ' + r.status); e.target.value = '';
+}, `Kassa is reading ${files.length} ${files.length === 1 ? 'file' : 'files'}…`, 'Read. See the result in the table.'); };
+$('btn-paste').onclick = () => { const t = $('paste').value.trim(); if (!t) return; act(async () => { await api('/bills/text', {method:'POST', body:JSON.stringify({text:t, source:'pasted'})}); $('paste').value = ''; }, 'Kassa is reading the invoice…', 'Read. See the result in the table.'); };
+
+async function sendSampleInvoices() {
+  const inv = await api('/samples/invoices');
+  if (!inv.length || !inv[0].customer_email) throw new Error('The server has no DEMO_CUSTOMER_EMAIL set.');
+  for (let i = 0; i < inv.length; i++) { working(`Sending invoice ${i + 1} of ${inv.length} to ${inv[i].customer_name} through PayPal`); await api('/invoices', {method:'POST', body:JSON.stringify(inv[i])}); await load(); }
+}
+$('btn-sample-invoices').onclick = () => act(sendSampleInvoices, 'Sending sample invoices…', 'Three invoices sent. Open one to see the page your customer gets.');
+$('btn-new-invoice').onclick = () => { $('invoice-form').open = true; document.querySelector('#form-invoice input').focus(); };
+$('form-invoice').onsubmit = e => { e.preventDefault(); const f = Object.fromEntries(new FormData(e.target).entries());
+  act(() => api('/invoices', {method:'POST', body:JSON.stringify({customer_name:f.customer_name, customer_email:f.customer_email, due_in_days:+f.due_in_days || 14, memo:f.memo || null, items:[{name:f.item, unit_amount:+f.amount, quantity:1}]})}),
+      'Sending the invoice through PayPal…', 'Invoice sent. Open it to see the page your customer gets.'); };
+
+/* ---------- chat ---------- */
+let chatBusy = false;
 function renderChat(msgs) {
-  const log = document.getElementById('log');
-  log.innerHTML = msgs.map(m => `<div class="msg ${m.role}">${md(m.content)}</div>`).join('');
+  const log = $('log');
+  log.innerHTML = msgs.length ? msgs.map(m => `<div class="msg ${m.role}">${m.role === 'assistant' ? md(m.content) : esc(m.content)}</div>`).join('')
+                              : '<div class="msg assistant">I read supplier invoices, pay the ones you or the policy approved, and send invoices to customers through PayPal. Ask me anything about the bills on the left.</div>';
   log.scrollTop = log.scrollHeight;
 }
-const esc = s => String(s).replace(/[&<>]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;'}[c]));
-const md = s => esc(s).replace(/\*\*(.+?)\*\*/g, '<b>$1</b>').replace(/\[([^\]]+)\]\((https?:[^)\s]+)\)/g, '<a href="$2" target="_blank">$1</a>').replace(/(^|\s)(https?:\/\/[^\s<]+)/g, '$1<a href="$2" target="_blank">$2</a>').replace(/^- /gm, '• ');
-function showDetail(title, obj, preKeys){
-  const box = document.getElementById('detail');
-  const rows = Object.entries(obj).filter(([k,v]) => v!==null && v!=='' && !preKeys.includes(k)).map(([k,v]) => `<tr><th>${esc(k)}</th><td>${esc(typeof v==='object' ? JSON.stringify(v, null, 1) : v)}</td></tr>`).join('');
-  const pres = preKeys.filter(k => obj[k]).map(k => `<h4>${esc(k)}</h4><pre>${esc(pretty(obj[k]))}</pre>`).join('');
-  box.innerHTML = `<h2>${esc(title)} <button id="detail-close">close</button></h2><table class="kv">${rows}</table>${pres}`;
-  box.style.display = 'block'; box.scrollIntoView({behavior:'smooth', block:'nearest'});
-  document.getElementById('detail-close').onclick = () => box.style.display = 'none';
+async function sendChat(text) {
+  if (!text || chatBusy) return;
+  chatBusy = true; $('chat-in').value = ''; $('chat-in').disabled = true; document.querySelectorAll('#suggest button').forEach(b => b.disabled = true);
+  const log = $('log');
+  log.insertAdjacentHTML('beforeend', `<div class="msg user">${esc(text)}</div><div class="msg assistant working" id="pending"><span class="dots"><span></span><span></span><span></span></span> Kassa is working <span id="secs">0 s</span></div>`);
+  log.scrollTop = log.scrollHeight;
+  const t0 = Date.now(), tick = setInterval(() => { const s = $('secs'); if (s) s.textContent = Math.round((Date.now() - t0) / 1000) + ' s'; }, 500);
+  try {
+    const r = await api('/chat', {method:'POST', body:JSON.stringify({message:text})});
+    const used = (r.tools || []).length ? `<span class="used">Used: ${[...new Set(r.tools)].map(x => x.replace(/_/g, ' ')).join(', ')}</span>` : '';
+    $('pending').outerHTML = `<div class="msg assistant">${md(r.reply)}${used}</div>`;
+  } catch (err) { $('pending').outerHTML = `<div class="msg assistant" style="border-color:var(--red)">${esc(err.message)}</div>`; }
+  clearInterval(tick); chatBusy = false; $('chat-in').disabled = false; document.querySelectorAll('#suggest button').forEach(b => b.disabled = false); $('chat-in').focus();
+  log.scrollTop = log.scrollHeight; await load();
 }
-function pretty(v){ if (typeof v !== 'string') return JSON.stringify(v, null, 2); try { return JSON.stringify(JSON.parse(v), null, 2); } catch { return v; } }
+$('chat').onsubmit = e => { e.preventDefault(); sendChat($('chat-in').value.trim()); };
+$('suggest').onclick = e => { const b = e.target.closest('button'); if (b) sendChat(b.textContent); };
 
-function busy(msg){ const b = document.getElementById('busy'); if (msg) { b.textContent = msg; b.classList.add('on'); document.body.classList.add('working'); } else { b.classList.remove('on'); document.body.classList.remove('working'); } }
-function toast(text, kind='ok'){ const t = document.createElement('div'); t.className = 'toast ' + kind; t.textContent = text; document.body.appendChild(t); setTimeout(() => t.classList.add('show'), 10); setTimeout(() => { t.classList.remove('show'); setTimeout(() => t.remove(), 300); }, kind==='bad' ? 7000 : 3500); }
-async function act(fn, msg, done){ busy(msg || 'Working…'); try { await fn(); if (done) toast(done); } catch(err) { toast(err.message, 'bad'); } finally { busy(null); } await load(); }
-async function loadSamples(){
-  const samples0 = await api('/samples');
-  const names = new Set(samples0.map(x => x.name));
-  if (BILLS.some(b => names.has(b.source))) {
-    if (confirm('The sample inbox is already loaded.\n\nOK: start over (clears demo data and loads the samples fresh).\nCancel: load them again anyway and watch the agent reject them as duplicates.')) {
-      busy('Clearing demo data…'); await api('/reset', {method:'POST'}); await load();
-    }
-  }
-  busy('Adding the suppliers the company already works with…');
-  await api('/samples/suppliers', {method:'POST'});
-  const samples = await api('/samples');
-  for (let i = 0; i < samples.length; i++) {
-    busy(`Agent is reading invoice ${i+1} of ${samples.length}: ${samples[i].name}`);
-    await api('/bills/text', {method:'POST', body:JSON.stringify({text: samples[i].text, source: samples[i].name})});
-    await load();
-  }
-}
-async function loadSampleInvoices(){
-  const inv = await api('/samples/invoices');
-  if (!inv.length || !inv[0].customer_email) throw new Error('DEMO_CUSTOMER_EMAIL is not set on the server');
-  for (let i = 0; i < inv.length; i++) {
-    busy(`Creating and sending invoice ${i+1} of ${inv.length} via PayPal: ${inv[i].customer_name}`);
-    await api('/invoices', {method:'POST', body:JSON.stringify(inv[i])});
-    await load();
-  }
-}
-let CFG = {};
-let BILLS = [];
-document.getElementById('btn-samples').onclick = () => act(loadSamples, 'Loading sample inbox…', 'Sample inbox processed: 2 bills auto-approved for trusted suppliers, 2 wait for you in the queue, 1 duplicate rejected. Click “Pay all approved”.');
-document.getElementById('btn-pay-approved').onclick = () => act(async () => { const r = await api('/bills/pay-approved', {method:'POST'}); const ok = r.filter(x => !x.error).length; if (!r.length) throw new Error('Nothing to pay: no bills in approved state. Approve something in the queue first.'); toast(`Paid ${ok} of ${r.length} approved bill(s) via PayPal Payouts`); }, 'Paying approved bills via PayPal Payouts…');
-document.getElementById('btn-refresh').onclick = () => act(() => api('/refresh', {method:'POST'}), 'Pulling statuses from PayPal…');
-document.getElementById('btn-reset').onclick = () => confirm('Clear all demo data?') && act(() => api('/reset', {method:'POST'}), 'Resetting…', 'Demo data cleared.');
-document.getElementById('btn-paste').onclick = () => act(async () => { const t = document.getElementById('paste').value.trim(); if(!t) return; await api('/bills/text', {method:'POST', body:JSON.stringify({text:t, source:'paste'})}); document.getElementById('paste').value=''; }, 'Agent is reading the pasted invoice…');
-document.getElementById('btn-upload').onclick = () => document.getElementById('file').click();
-document.getElementById('file').onchange = e => act(async () => { const fd = new FormData(); for (const f of e.target.files) fd.append('files', f); const r = await fetch('/api/bills/upload', {method:'POST', body:fd, headers:{'X-Kassa-Key': getKey()}}); if (r.status === 401) { askKey('Wrong or missing access key.'); throw new Error('access key required'); } if(!r.ok) throw new Error(await r.text()); e.target.value=''; }, `Agent is reading ${e.target.files.length} file(s)…`);
-document.getElementById('queue').onclick = e => {
-  const btn = e.target.closest('button[data-act]'); if(!btn) return;
-  const id = btn.dataset.id;
-  if (btn.dataset.act==='approve') { const trust = document.querySelector(`input[data-trust="${id}"]`).checked;
-    const bill = BILLS.find(b => String(b.id) === String(id));
-    if (bill && bill.risk_level === 'high' && !confirm('Kassa flagged this bill as a possible scam:\n\n- ' + (bill.risk_signals||[]).join('\n- ') + '\n\nApprove it anyway?')) return; act(() => api(`/bills/${id}/approve`, {method:'POST', body:JSON.stringify({trust_supplier:trust})}), 'Approving…', `Bill #${id} approved. Click “Pay all approved” to pay it.`); }
-  else { const reason = prompt('Reason for rejecting?', 'not a valid invoice'); if (reason!=null) act(() => api(`/bills/${id}/reject`, {method:'POST', body:JSON.stringify({reason})}), 'Rejecting…', `Bill #${id} rejected.`); }
-};
-document.getElementById('btn-sample-invoices').onclick = () => act(loadSampleInvoices, 'Loading sample invoices…', 'Three invoices sent via PayPal. Click “open” to see the PayPal payment page.');
-document.getElementById('btn-new-invoice').onclick = () => { const d = document.getElementById('invoice-form'); d.open = true; d.querySelector('input').focus(); };
-document.getElementById('form-invoice').onsubmit = e => {
-  e.preventDefault(); const f = Object.fromEntries(new FormData(e.target).entries());
-  act(() => api('/invoices', {method:'POST', body:JSON.stringify({customer_name:f.customer_name, customer_email:f.customer_email, due_in_days:+f.due_in_days||14, memo:f.memo||null,
-      items:[{name:f.item, unit_amount:+f.amount, quantity:1}]})}), 'Creating and sending the invoice via PayPal…', 'Invoice created and sent. Open the link in the table to see the PayPal page.');
-};
-document.getElementById('chat').onsubmit = async e => {
-  e.preventDefault(); const inp = document.getElementById('chat-in'); const m = inp.value.trim(); if(!m) return; inp.value=''; busy('Kassa is thinking…');
-  const log = document.getElementById('log'); log.insertAdjacentHTML('beforeend', `<div class="msg user">${esc(m)}</div><div class="msg assistant" id="pending">…</div>`); log.scrollTop = log.scrollHeight;
-  try { const r = await api('/chat', {method:'POST', body:JSON.stringify({message:m})}); document.getElementById('pending').innerHTML = md(r.reply); }
-  catch(err) { document.getElementById('pending').textContent = 'Error: ' + err.message; }
-  busy(null); await load();
-};
-document.getElementById('gate-form').onsubmit = async e => {
-  e.preventDefault(); const k = document.getElementById('gate-key').value.trim(); if (!k) return;
-  localStorage.setItem(KEY_NAME, k);
-  try { await api('/config'); document.getElementById('gate').style.display = 'none'; await load(); }
-  catch (err) { localStorage.removeItem(KEY_NAME); }
-};
-document.getElementById('lock').onclick = () => { localStorage.removeItem(KEY_NAME); askKey(''); };
-async function boot(){
+/* ---------- boot ---------- */
+(async function boot() {
   const h = await fetch('/api/health').then(r => r.json()).catch(() => ({gate:true}));
   if (h.gate && !getKey()) { askKey(''); return; }
   try { await load(); } catch (e) {}
-}
-boot();
-setInterval(() => { if (document.getElementById('gate').style.display !== 'flex') load().catch(() => {}); }, 15000);
+})();
+setInterval(() => { if (!$('gate').open && !document.body.classList.contains('working') && !chatBusy) load().catch(() => {}); }, 15000);
 </script>
 </body>
 </html>

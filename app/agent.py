@@ -239,10 +239,14 @@ class Kassa:
         raise KeyError(name)
 
     def chat(self, user_text: str) -> str:
+        return self.chat_with_trace(user_text)[0]
+
+    def chat_with_trace(self, user_text: str) -> tuple[str, list[str]]:
         self.store.add_chat("user", user_text)
+        self._trace: list[str] = []
         answer = self._chat_llm(user_text) if llm.provider() else self._chat_rules(user_text)
         self.store.add_chat("assistant", answer)
-        return answer
+        return answer, list(self._trace)
 
     def _chat_llm(self, user_text: str) -> str:
         system = (f"You are Kassa, the finance agent of {self.merchant_name}. Today is {date.today().isoformat()}. "
@@ -252,7 +256,10 @@ class Kassa:
                   "tell the user to approve the bill in the queue. Always give a one-line reason when you move money. "
                   "Be brief and concrete: amounts, ids, statuses.")
         history = [{"role": m["role"], "content": m["content"]} for m in self.store.list_chat(12)[:-1]]
-        return llm.run_agent(system, history, user_text, self.tools(), self.run_tool)
+        def traced(name, args):
+            self._trace.append(name)
+            return self.run_tool(name, args)
+        return llm.run_agent(system, history, user_text, self.tools(), traced)
 
     def _chat_rules(self, text: str) -> str:
         """No LLM key: a few canned commands so the demo still works."""

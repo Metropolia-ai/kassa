@@ -162,6 +162,8 @@ def combine_risk(llm_level: str | None, llm_signals: list[str] | None, rule_sign
         x = x.strip().rstrip(".")
         if x and x.lower() not in {y.lower() for y in signals}:
             signals.append(x)
+    if any(x.lower().startswith("no invoice,") for x in signals):
+        signals = [x for x in signals if x.lower() != "no invoice number"]
     strong = [x for x in rule_signals if x != "no invoice number"]
     level = "low"
     if len(strong) >= 2 or (llm_level == "high" and len(llm_signals or []) >= 2):
