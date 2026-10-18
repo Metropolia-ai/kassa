@@ -46,7 +46,7 @@ def extract(text: str) -> dict[str, Any]:
 
 def extract_llm(text: str) -> dict[str, Any]:
     data = llm.call_tool_once(SYSTEM, text[:20000], TOOL)
-    data["extractor"] = llm.provider() + ":" + llm.model_name()
+    data["extractor"] = llm.provider() + ":" + llm.model_name("extract")
     return _normalise(data)
 
 

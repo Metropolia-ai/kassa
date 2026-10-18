@@ -17,8 +17,11 @@ def provider() -> str | None:
     return None
 
 
-def model_name() -> str:
-    return os.environ.get("LLM_MODEL") or os.environ.get("ANTHROPIC_MODEL") or "openai/gpt-5-mini"
+def model_name(kind: str = "chat") -> str:
+    """kind: "chat" (agent loop) or "extract" (structured extraction, can be a cheaper model)."""
+    if kind == "extract" and os.environ.get("LLM_EXTRACT_MODEL"):
+        return os.environ["LLM_EXTRACT_MODEL"]
+    return os.environ.get("LLM_MODEL") or os.environ.get("ANTHROPIC_MODEL") or "openai/gpt-6-luna"
 
 
 def _openai_client():
@@ -41,7 +44,7 @@ def call_tool_once(system: str, user_text: str, tool: dict) -> dict:
     if p == "anthropic":
         import anthropic
         client = anthropic.Anthropic(api_key=os.environ["ANTHROPIC_API_KEY"])
-        msg = client.messages.create(model=model_name(), max_tokens=1500, system=system, tools=[tool],
+        msg = client.messages.create(model=model_name("extract"), max_tokens=1500, system=system, tools=[tool],
                                      tool_choice={"type": "tool", "name": tool["name"]},
                                      messages=[{"role": "user", "content": user_text}])
         for b in msg.content:
@@ -51,7 +54,7 @@ def call_tool_once(system: str, user_text: str, tool: dict) -> dict:
     if p == "openai":
         client = _openai_client()
         resp = client.chat.completions.create(
-            model=model_name(), max_tokens=1500,
+            model=model_name("extract"), max_tokens=1500,
             messages=[{"role": "system", "content": system}, {"role": "user", "content": user_text}],
             tools=_to_openai_tools([tool]),
             tool_choice={"type": "function", "function": {"name": tool["name"]}})
