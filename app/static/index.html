@@ -40,6 +40,7 @@
   .s-SENT,.s-UNPAID{background:#1f2a3a;color:#7fb6ff} .s-PAID{background:#1b3a2a;color:var(--ok)} .s-DRAFT{background:#232838;color:var(--muted)}
   .hint { color:var(--muted); font-size:12px; }
   a { color:#7fb6ff; }
+  .ag-cell-wrap-text { line-height:1.4 !important; padding-top:8px !important; padding-bottom:8px !important; word-break:break-word; }
   #detail table.kv { width:100%; border-collapse:collapse; font-size:13px; } #detail th { text-align:left; color:var(--muted); font-weight:500; padding:3px 10px 3px 0; white-space:nowrap; vertical-align:top; width:140px; }
   #detail td { padding:3px 0; white-space:pre-wrap; word-break:break-word; } #detail pre { background:#0f1115; border:1px solid var(--line); border-radius:6px; padding:10px; white-space:pre-wrap; word-break:break-word; font-size:12px; max-height:360px; overflow:auto; }
   #detail h4 { margin:10px 0 4px; color:var(--muted); font-size:12px; text-transform:uppercase; } #detail h2 button { margin-left:auto; }
@@ -105,10 +106,10 @@ const gridOpts = (cols, extra={}) => ({ theme: darkTheme, columnDefs: cols, rowD
 const billsGrid = agGrid.createGrid(document.getElementById('bills'), gridOpts([
   {field:'id', headerName:'#', maxWidth:60},
   {field:'supplier', headerName:'Supplier', minWidth:150, wrapText:true, autoHeight:true},
-  {field:'invoice_number', headerName:'Invoice №'},
-  {field:'due_date', headerName:'Due'},
+  {field:'invoice_number', headerName:'Invoice №', minWidth:130},
+  {field:'due_date', headerName:'Due', minWidth:110},
   {field:'amount', headerName:'Amount', valueFormatter:p=>money(p.value,p.data.currency), type:'rightAligned'},
-  {field:'status', headerName:'Status', cellRenderer:p=>pill(p.value)},
+  {field:'status', headerName:'Status', minWidth:150, cellRenderer:p=>pill(p.value)},
   {field:'reason', headerName:'Why', minWidth:300, flex:2, wrapText:true, autoHeight:true},
   {field:'payout_status', headerName:'Payout'},
 ], {onRowClicked: e => showDetail('Bill #'+e.data.id, e.data, ['raw_text'])}));
@@ -118,7 +119,7 @@ const invGrid = agGrid.createGrid(document.getElementById('invoices'), gridOpts(
   {field:'customer_email', headerName:'Email', minWidth:200},
   {field:'amount', headerName:'Amount', valueFormatter:p=>money(p.value,p.data.currency), type:'rightAligned'},
   {field:'due_date', headerName:'Due'},
-  {field:'status', headerName:'PayPal status', cellRenderer:p=>pill(p.value||'')},
+  {field:'status', headerName:'PayPal status', minWidth:130, cellRenderer:p=>pill(p.value||'')},
   {field:'pay_url', headerName:'Link', cellRenderer:p=>p.value?`<a href="${p.value}" target="_blank">open</a>`:''},
 ]));
 const auditGrid = agGrid.createGrid(document.getElementById('audit'), gridOpts([
@@ -158,10 +159,11 @@ function renderQueue(items) {
 }
 function renderChat(msgs) {
   const log = document.getElementById('log');
-  log.innerHTML = msgs.map(m => `<div class="msg ${m.role}">${esc(m.content)}</div>`).join('');
+  log.innerHTML = msgs.map(m => `<div class="msg ${m.role}">${md(m.content)}</div>`).join('');
   log.scrollTop = log.scrollHeight;
 }
 const esc = s => String(s).replace(/[&<>]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;'}[c]));
+const md = s => esc(s).replace(/\*\*(.+?)\*\*/g, '<b>$1</b>').replace(/\[([^\]]+)\]\((https?:[^)\s]+)\)/g, '<a href="$2" target="_blank">$1</a>').replace(/(^|\s)(https?:\/\/[^\s<]+)/g, '$1<a href="$2" target="_blank">$2</a>').replace(/^- /gm, '• ');
 function showDetail(title, obj, preKeys){
   const box = document.getElementById('detail');
   const rows = Object.entries(obj).filter(([k,v]) => v!==null && v!=='' && !preKeys.includes(k)).map(([k,v]) => `<tr><th>${esc(k)}</th><td>${esc(typeof v==='object' ? JSON.stringify(v, null, 1) : v)}</td></tr>`).join('');
@@ -189,7 +191,7 @@ document.getElementById('queue').onclick = e => {
 document.getElementById('chat').onsubmit = async e => {
   e.preventDefault(); const inp = document.getElementById('chat-in'); const m = inp.value.trim(); if(!m) return; inp.value='';
   const log = document.getElementById('log'); log.insertAdjacentHTML('beforeend', `<div class="msg user">${esc(m)}</div><div class="msg assistant" id="pending">…</div>`); log.scrollTop = log.scrollHeight;
-  try { const r = await api('/chat', {method:'POST', body:JSON.stringify({message:m})}); document.getElementById('pending').textContent = r.reply; }
+  try { const r = await api('/chat', {method:'POST', body:JSON.stringify({message:m})}); document.getElementById('pending').innerHTML = md(r.reply); }
   catch(err) { document.getElementById('pending').textContent = 'Error: ' + err.message; }
   await load();
 };
