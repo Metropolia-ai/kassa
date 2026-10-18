@@ -6,7 +6,9 @@ import os
 from pathlib import Path
 
 from dotenv import load_dotenv
-from fastapi import FastAPI, File, HTTPException, UploadFile
+import hmac
+
+from fastapi import FastAPI, File, HTTPException, Request, UploadFile
 from fastapi.responses import FileResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
@@ -33,6 +35,40 @@ def build_kassa() -> Kassa:
 
 app = FastAPI(title="Kassa", version="0.1")
 kassa = build_kassa()
+
+# --- access gate ---------------------------------------------------------
+# Every /api/* call needs header X-Kassa-Key == ACCESS_KEY. The page itself is public, the API is not,
+# so nobody can spend the LLM key or touch the PayPal sandbox without the key.
+# Vercel Cron calls /api/refresh with "Authorization: Bearer $CRON_SECRET".
+# Fail closed on Vercel if ACCESS_KEY is missing; locally an unset key means open (dev mode).
+ACCESS_KEY = os.environ.get("ACCESS_KEY", "")
+CRON_SECRET = os.environ.get("CRON_SECRET", "")
+ON_VERCEL = bool(os.environ.get("VERCEL"))
+OPEN_PATHS = {"/api/health"}
+
+
+def _eq(a: str, b: str) -> bool:
+    return bool(a) and bool(b) and hmac.compare_digest(a.encode(), b.encode())
+
+
+@app.middleware("http")
+async def access_gate(request: Request, call_next):
+    path = request.url.path
+    if path.startswith("/api/") and path not in OPEN_PATHS:
+        if not ACCESS_KEY and ON_VERCEL:
+            return JSONResponse(status_code=503, content={"error": "ACCESS_KEY is not configured on the server"})
+        if ACCESS_KEY:
+            key = request.headers.get("x-kassa-key", "")
+            bearer = request.headers.get("authorization", "").removeprefix("Bearer ").strip()
+            cron_ok = path == "/api/refresh" and _eq(bearer, CRON_SECRET)
+            if not (_eq(key, ACCESS_KEY) or cron_ok):
+                return JSONResponse(status_code=401, content={"error": "access key required"})
+    return await call_next(request)
+
+
+@app.get("/api/health")
+def health():
+    return {"ok": True, "gate": bool(ACCESS_KEY)}
 
 # Vercel Hobby runs cron at most once a day, so status refresh is also done lazily on reads:
 # at most once per LAZY_REFRESH_S while the dashboard is open.

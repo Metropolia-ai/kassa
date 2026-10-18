@@ -24,6 +24,9 @@ PayPal credentials: Developer Dashboard → Apps & Credentials → Sandbox → y
 
 Optional LLM: set `OPENROUTER_API_KEY` + `LLM_MODEL` (any OpenAI-compatible endpoint works via `OPENAI_API_KEY`/`OPENAI_BASE_URL`), or `ANTHROPIC_API_KEY`. Without a key, extraction is rule-based and chat understands a few commands (`list bills`, `pay approved bills`, `pay #3`, `invoice …`, `refresh status`).
 
+## Access key
+The hosted demo is gated: the page asks for an access key once and stores it in the browser; every API call sends it as `X-Kassa-Key`. Without it the API returns 401, so nobody can spend the LLM budget or use the PayPal sandbox. Judges get the key in the Devpost testing instructions.
+
 ## Demo walkthrough
 1. **Load sample inbox.** Five bills: two go to the queue (first time we see the supplier), one is rejected as a duplicate, one is overdue, one is a fake "urgent wire" with no invoice.
 2. **Approve** Pixelforge with "trust supplier". Click **Pay all approved**: a Payouts batch is created in the sandbox; **Refresh PayPal status** shows `SUCCESS`.

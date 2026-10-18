@@ -15,6 +15,11 @@
   header .busy { display:none; color:var(--accent); font-size:13px; font-weight:600; } header .busy.on { display:inline-flex; align-items:center; gap:8px; }
   header .busy.on::before { content:''; width:12px; height:12px; border:2px solid var(--accent); border-top-color:transparent; border-radius:50%; animation:spin .8s linear infinite; }
   @keyframes spin { to { transform:rotate(360deg); } }
+  #gate { position:fixed; inset:0; background:rgba(5,6,9,.82); display:none; align-items:center; justify-content:center; z-index:100; }
+  #gate form { background:var(--panel); border:1px solid var(--line); border-radius:12px; padding:22px; width:360px; display:flex; flex-direction:column; gap:10px; }
+  #gate h2 { margin:0; font-size:18px; } #gate input { padding:9px; border-radius:6px; border:1px solid var(--line); background:#0f1115; color:var(--text); font:inherit; }
+  .gate-msg { color:var(--bad); font-size:12px; min-height:14px; }
+  #lock { margin-left:12px; }
   .toast { position:fixed; right:20px; bottom:20px; background:#1d2230; border:1px solid var(--line); border-left:4px solid var(--ok); color:var(--text); padding:10px 14px; border-radius:8px; max-width:420px; font-size:13px; opacity:0; transform:translateY(10px); transition:all .25s; z-index:50; }
   .toast.show { opacity:1; transform:none; } .toast.bad { border-left-color:var(--bad); }
   body.working button:not(#detail-close) { opacity:.55; pointer-events:none; }
@@ -56,10 +61,17 @@
 </style>
 </head>
 <body>
+<div id="gate"><form id="gate-form">
+  <h2>Kassa demo</h2>
+  <p class="hint">This demo uses a real LLM and the PayPal sandbox. Enter the access key you were given. It is stored only in this browser.</p>
+  <input id="gate-key" type="password" placeholder="Access key" autocomplete="current-password" required>
+  <div id="gate-msg" class="gate-msg"></div>
+  <button class="primary">Enter</button>
+</form></div>
 <header>
   <h1>Kassa <span>·</span> agentic AP/AR on PayPal</h1>
   <div class="busy" id="busy"></div>
-  <div class="meta" id="meta">…</div>
+  <div class="meta" id="meta">…</div><button id="lock" title="Forget the access key in this browser">Lock</button>
 </header>
 <main>
   <div class="stack">
@@ -116,7 +128,16 @@
   </div>
 </main>
 <script>
-const api = (p, o={}) => fetch('/api'+p, {headers:{'Content-Type':'application/json'}, ...o}).then(async r => { const j = await r.json().catch(()=>({})); if(!r.ok) throw new Error(j.error || JSON.stringify(j)); return j; });
+const KEY_NAME = 'kassa_access_key';
+const getKey = () => localStorage.getItem(KEY_NAME) || '';
+const api = (p, o={}) => fetch('/api'+p, {...o, headers:{'Content-Type':'application/json', 'X-Kassa-Key': getKey(), ...(o.headers||{})}}).then(async r => {
+  const j = await r.json().catch(()=>({}));
+  if (r.status === 401) { askKey('Wrong or missing access key.'); throw new Error('access key required'); }
+  if(!r.ok) throw new Error(j.error || JSON.stringify(j)); return j; });
+function askKey(msg){
+  const m = document.getElementById('gate'); document.getElementById('gate-msg').textContent = msg || '';
+  m.style.display = 'flex'; const i = document.getElementById('gate-key'); i.value = ''; setTimeout(() => i.focus(), 50);
+}
 const pill = s => `<span class="pill s-${s}">${s}</span>`;
 const money = (v,c) => v==null ? '' : new Intl.NumberFormat('fi-FI',{style:'currency',currency:c||'EUR'}).format(v);
 const fmtTs = t => t ? t.replace('T',' ').slice(0,19) : '';
@@ -212,7 +233,7 @@ document.getElementById('btn-refresh').onclick = () => act(() => api('/refresh',
 document.getElementById('btn-reset').onclick = () => confirm('Clear all demo data?') && act(() => api('/reset', {method:'POST'}), 'Resetting…', 'Demo data cleared.');
 document.getElementById('btn-paste').onclick = () => act(async () => { const t = document.getElementById('paste').value.trim(); if(!t) return; await api('/bills/text', {method:'POST', body:JSON.stringify({text:t, source:'paste'})}); document.getElementById('paste').value=''; }, 'Agent is reading the pasted invoice…');
 document.getElementById('btn-upload').onclick = () => document.getElementById('file').click();
-document.getElementById('file').onchange = e => act(async () => { const fd = new FormData(); for (const f of e.target.files) fd.append('files', f); const r = await fetch('/api/bills/upload', {method:'POST', body:fd}); if(!r.ok) throw new Error(await r.text()); e.target.value=''; }, `Agent is reading ${e.target.files.length} file(s)…`);
+document.getElementById('file').onchange = e => act(async () => { const fd = new FormData(); for (const f of e.target.files) fd.append('files', f); const r = await fetch('/api/bills/upload', {method:'POST', body:fd, headers:{'X-Kassa-Key': getKey()}}); if (r.status === 401) { askKey('Wrong or missing access key.'); throw new Error('access key required'); } if(!r.ok) throw new Error(await r.text()); e.target.value=''; }, `Agent is reading ${e.target.files.length} file(s)…`);
 document.getElementById('queue').onclick = e => {
   const btn = e.target.closest('button[data-act]'); if(!btn) return;
   const id = btn.dataset.id;
@@ -232,8 +253,20 @@ document.getElementById('chat').onsubmit = async e => {
   catch(err) { document.getElementById('pending').textContent = 'Error: ' + err.message; }
   busy(null); await load();
 };
-load();
-setInterval(load, 15000);
+document.getElementById('gate-form').onsubmit = async e => {
+  e.preventDefault(); const k = document.getElementById('gate-key').value.trim(); if (!k) return;
+  localStorage.setItem(KEY_NAME, k);
+  try { await api('/config'); document.getElementById('gate').style.display = 'none'; await load(); }
+  catch (err) { localStorage.removeItem(KEY_NAME); }
+};
+document.getElementById('lock').onclick = () => { localStorage.removeItem(KEY_NAME); askKey(''); };
+async function boot(){
+  const h = await fetch('/api/health').then(r => r.json()).catch(() => ({gate:true}));
+  if (h.gate && !getKey()) { askKey(''); return; }
+  try { await load(); } catch (e) {}
+}
+boot();
+setInterval(() => { if (document.getElementById('gate').style.display !== 'flex') load().catch(() => {}); }, 15000);
 </script>
 </body>
 </html>
