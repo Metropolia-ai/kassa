@@ -40,6 +40,9 @@
   .s-SENT,.s-UNPAID{background:#1f2a3a;color:#7fb6ff} .s-PAID{background:#1b3a2a;color:var(--ok)} .s-DRAFT{background:#232838;color:var(--muted)}
   .hint { color:var(--muted); font-size:12px; }
   a { color:#7fb6ff; }
+  #detail table.kv { width:100%; border-collapse:collapse; font-size:13px; } #detail th { text-align:left; color:var(--muted); font-weight:500; padding:3px 10px 3px 0; white-space:nowrap; vertical-align:top; width:140px; }
+  #detail td { padding:3px 0; white-space:pre-wrap; word-break:break-word; } #detail pre { background:#0f1115; border:1px solid var(--line); border-radius:6px; padding:10px; white-space:pre-wrap; word-break:break-word; font-size:12px; max-height:360px; overflow:auto; }
+  #detail h4 { margin:10px 0 4px; color:var(--muted); font-size:12px; text-transform:uppercase; } #detail h2 button { margin-left:auto; }
   @media (max-width:1100px){ main{grid-template-columns:1fr} }
 </style>
 </head>
@@ -51,7 +54,7 @@
 <main>
   <div class="stack">
     <section>
-      <h2>Inbox → supplier bills
+      <h2>Inbox → supplier bills <span class="hint">click a row for details</span>
         <div class="toolbar">
           <button id="btn-samples" class="primary">Load sample inbox</button>
           <input type="file" id="file" multiple style="display:none">
@@ -73,8 +76,9 @@
       </h2>
       <div id="invoices" class="grid"></div>
     </section>
+    <section id="detail" style="display:none"></section>
     <section>
-      <h2>Audit log <span class="hint">every tool call, with the agent's reason</span></h2>
+      <h2>Audit log <span class="hint">every tool call, with the agent's reason · click a row for full input/output</span></h2>
       <div id="audit" class="grid"></div>
     </section>
   </div>
@@ -97,17 +101,17 @@ const money = (v,c) => v==null ? '' : new Intl.NumberFormat('fi-FI',{style:'curr
 const fmtTs = t => t ? t.replace('T',' ').slice(0,19) : '';
 
 const darkTheme = agGrid.themeQuartz.withPart(agGrid.colorSchemeDark).withParams({backgroundColor:'#12151c', headerBackgroundColor:'#171a21', borderColor:'#262b36', foregroundColor:'#e8eaf0', fontSize:12, rowHoverColor:'#1d2230', accentColor:'#ffc439'});
-const gridOpts = (cols, extra={}) => ({ theme: darkTheme, columnDefs: cols, rowData: [], defaultColDef:{sortable:true, filter:true, resizable:true, flex:1, minWidth:90}, animateRows:true, getRowId: p => String(p.data.id), ...extra });
+const gridOpts = (cols, extra={}) => ({ theme: darkTheme, columnDefs: cols, rowData: [], defaultColDef:{sortable:true, filter:true, resizable:true, flex:1, minWidth:90}, tooltipShowDelay:200, animateRows:true, getRowId: p => String(p.data.id), ...extra });
 const billsGrid = agGrid.createGrid(document.getElementById('bills'), gridOpts([
   {field:'id', headerName:'#', maxWidth:60},
-  {field:'supplier', headerName:'Supplier', minWidth:150},
+  {field:'supplier', headerName:'Supplier', minWidth:150, wrapText:true, autoHeight:true},
   {field:'invoice_number', headerName:'Invoice №'},
   {field:'due_date', headerName:'Due'},
   {field:'amount', headerName:'Amount', valueFormatter:p=>money(p.value,p.data.currency), type:'rightAligned'},
   {field:'status', headerName:'Status', cellRenderer:p=>pill(p.value)},
-  {field:'reason', headerName:'Why', minWidth:260, tooltipField:'reason'},
+  {field:'reason', headerName:'Why', minWidth:300, flex:2, wrapText:true, autoHeight:true},
   {field:'payout_status', headerName:'Payout'},
-], {rowSelection:{mode:'singleRow'}, onRowSelected: showBill}));
+], {onRowClicked: e => showDetail('Bill #'+e.data.id, e.data, ['raw_text'])}));
 const invGrid = agGrid.createGrid(document.getElementById('invoices'), gridOpts([
   {field:'invoice_number', headerName:'Invoice №'},
   {field:'customer_name', headerName:'Customer', minWidth:140},
@@ -122,10 +126,10 @@ const auditGrid = agGrid.createGrid(document.getElementById('audit'), gridOpts([
   {field:'actor', headerName:'Actor', maxWidth:90},
   {field:'tool', headerName:'Tool', minWidth:160},
   {field:'ok', headerName:'OK', maxWidth:60, cellRenderer:p=>p.value?'✓':'✗'},
-  {field:'reason', headerName:'Reason', minWidth:220, tooltipField:'reason'},
+  {field:'reason', headerName:'Reason', minWidth:220, flex:2, wrapText:true, autoHeight:true},
   {field:'input', headerName:'Input', minWidth:200, tooltipField:'input'},
   {field:'output', headerName:'Output', minWidth:200, tooltipField:'output'},
-]));
+], {onRowClicked: e => showDetail('Audit #'+e.data.id+' · '+e.data.tool, e.data, ['input','output'])}));
 
 async function load() {
   const [cfg, bills, invs, audit, chat] = await Promise.all([api('/config'), api('/bills'), api('/invoices'), api('/audit'), api('/chat')]);
@@ -158,7 +162,15 @@ function renderChat(msgs) {
   log.scrollTop = log.scrollHeight;
 }
 const esc = s => String(s).replace(/[&<>]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;'}[c]));
-function showBill(e){ if(!e.node.isSelected()) return; const b=e.data; console.log(b.raw_text); }
+function showDetail(title, obj, preKeys){
+  const box = document.getElementById('detail');
+  const rows = Object.entries(obj).filter(([k,v]) => v!==null && v!=='' && !preKeys.includes(k)).map(([k,v]) => `<tr><th>${esc(k)}</th><td>${esc(typeof v==='object' ? JSON.stringify(v, null, 1) : v)}</td></tr>`).join('');
+  const pres = preKeys.filter(k => obj[k]).map(k => `<h4>${esc(k)}</h4><pre>${esc(pretty(obj[k]))}</pre>`).join('');
+  box.innerHTML = `<h2>${esc(title)} <button id="detail-close">close</button></h2><table class="kv">${rows}</table>${pres}`;
+  box.style.display = 'block'; box.scrollIntoView({behavior:'smooth', block:'nearest'});
+  document.getElementById('detail-close').onclick = () => box.style.display = 'none';
+}
+function pretty(v){ if (typeof v !== 'string') return JSON.stringify(v, null, 2); try { return JSON.stringify(JSON.parse(v), null, 2); } catch { return v; } }
 
 async function act(fn){ try { await fn(); } catch(err) { alert(err.message); } await load(); }
 document.getElementById('btn-samples').onclick = () => act(() => api('/bills/samples', {method:'POST'}));
