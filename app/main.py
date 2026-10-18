@@ -73,7 +73,7 @@ def health():
 # Vercel Hobby runs cron at most once a day, so status refresh is also done lazily on reads:
 # at most once per LAZY_REFRESH_S while the dashboard is open.
 import time as _time
-LAZY_REFRESH_S = int(os.environ.get("LAZY_REFRESH_S", "600"))
+LAZY_REFRESH_S = int(os.environ.get("LAZY_REFRESH_S", "60"))
 _last_refresh = 0.0
 
 
@@ -99,6 +99,10 @@ class ChatIn(BaseModel):
 class ApproveIn(BaseModel):
     trust_supplier: bool = False
     note: str | None = None
+
+
+class SettingsIn(BaseModel):
+    auto_pay_limit: float
 
 
 class RejectIn(BaseModel):
@@ -257,6 +261,16 @@ def create_invoice(body: InvoiceIn):
 @app.api_route("/api/refresh", methods=["GET", "POST"])
 def refresh():
     return {"payouts": kassa.refresh_payouts(), "invoices": kassa.refresh_customer_invoices()}
+
+
+@app.get("/api/settings")
+def get_settings():
+    return {"auto_pay_limit": kassa.auto_pay_limit, "currency": kassa.currency}
+
+
+@app.put("/api/settings")
+def put_settings(body: SettingsIn):
+    return {"auto_pay_limit": kassa.set_auto_pay_limit(body.auto_pay_limit), "currency": kassa.currency}
 
 
 @app.get("/api/audit")

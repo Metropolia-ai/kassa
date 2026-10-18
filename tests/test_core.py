@@ -78,7 +78,7 @@ def test_pipeline_first_invoice_needs_approval_then_trusted_autopays(kassa):
     b1 = kassa.approve(b1["id"], trust_supplier=True)
     assert b1["status"] == "approved"
     b1 = kassa.pay_bill(b1["id"])
-    assert b1["status"] == "paid" and b1["payout_batch_id"] == "B1"
+    assert b1["status"] == "sent" and b1["payout_batch_id"] == "B1"
     # duplicate is rejected
     b3 = kassa.ingest("03", read("03-pixelforge-duplicate.txt"))
     assert b3["status"] == "rejected" and "duplicate" in b3["reason"]
@@ -86,7 +86,8 @@ def test_pipeline_first_invoice_needs_approval_then_trusted_autopays(kassa):
     text = read("01-pixelforge-render.txt").replace("PF-2026-0412", "PF-2026-0413")
     b4 = kassa.ingest("04", text)
     assert b4["status"] == "approved"
-    assert kassa.refresh_payouts() == [{"id": b1["id"], "payout_status": "SUCCESS"}]
+    assert kassa.refresh_payouts() == [{"id": b1["id"], "payout_status": "SUCCESS", "status": "paid"}]
+    assert kassa.store.get_bill(b1["id"])["status"] == "paid"
 
 
 def test_suspicious_email_is_held(kassa):
@@ -105,7 +106,7 @@ def test_customer_invoice_and_audit(kassa):
 def test_rules_chat(kassa):
     kassa.ingest("01", read("01-pixelforge-render.txt"))
     assert "Pixelforge" in kassa.chat("list bills")
-    assert "Paid 0" in kassa.chat("pay approved bills")
+    assert "Sent 0" in kassa.chat("pay approved bills")
 
 
 def test_trusted_supplier_autopays_even_if_overdue(kassa):
@@ -146,3 +147,20 @@ def test_lookalike_domain():
     from app.extract import risk_rules
     sig = risk_rules("Invoice 123", {"invoice_number": "123", "supplier_email": "ceo@frappua-payments.example"}, "Frappua", ("frappua.win",))
     assert any("imitates" in x for x in sig)
+
+
+def test_payout_status_mapping():
+    from app.agent import payout_to_bill_status as f
+    assert [f(x) for x in ("SUCCESS", "UNCLAIMED", "PENDING", "RETURNED", None)] == ["paid", "unclaimed", "sent", "failed", "sent"]
+
+
+def test_limit_is_a_setting(kassa):
+    assert kassa.auto_pay_limit == 500
+    kassa.set_auto_pay_limit(1000)
+    assert kassa.auto_pay_limit == 1000
+    kassa.store.upsert_supplier("pay@nordicvoice.example.com", "Nordic Voice Studio", trusted=True)
+    b = kassa.ingest("02", read("02-nordic-voice-studio.txt"))
+    assert b["status"] == "approved"  # 940 EUR is now under the limit
+    import pytest
+    with pytest.raises(ValueError):
+        kassa.set_auto_pay_limit(-1)

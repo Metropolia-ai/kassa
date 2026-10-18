@@ -24,8 +24,25 @@ class Kassa:
         self.paypal = paypal
         self.merchant_email = merchant_email
         self.merchant_name = merchant_name
-        self.auto_pay_limit = auto_pay_limit
+        self._default_limit = auto_pay_limit
         self.currency = currency
+
+    # Stored in the database so every serverless instance sees the same value.
+    @property
+    def auto_pay_limit(self) -> float:
+        v = self.store.get_setting("auto_pay_limit")
+        try:
+            return float(v) if v is not None else self._default_limit
+        except ValueError:
+            return self._default_limit
+
+    def set_auto_pay_limit(self, value: float, actor: str = "human") -> float:
+        if not (0 <= value <= 1_000_000):
+            raise ValueError("The limit must be between 0 and 1 000 000.")
+        old = self.auto_pay_limit
+        self.store.set_setting("auto_pay_limit", str(round(value, 2)))
+        self.store.audit(actor, "change_auto_pay_limit", {"from": old}, {"to": value}, f"auto-pay limit {old:.2f} -> {value:.2f}", True)
+        return self.auto_pay_limit
 
     # ------------------------------------------------------------------ inbox
     def ingest(self, source: str, text: str, actor: str = "agent") -> dict:
@@ -86,8 +103,8 @@ class Kassa:
         bill = self.store.get_bill(bill_id)
         if not bill:
             raise KeyError(bill_id)
-        if bill["status"] in ("paid", "paying"):
-            raise ValueError("cannot reject a bill that is being paid")
+        if bill["status"] in ("paid", "paying", "sent", "unclaimed"):
+            raise ValueError("This bill has already been sent to PayPal, so it can no longer be rejected.")
         self.store.update_bill(bill_id, status="rejected", reason=reason)
         self.store.audit(actor, "reject_bill", {"bill_id": bill_id}, {"status": "rejected"}, reason, True)
         return self.store.get_bill(bill_id)
@@ -115,7 +132,7 @@ class Kassa:
             self.store.audit(actor, "pay_bill", {"bill_id": bill_id, "amount": bill["amount"]}, e.body, reason, False)
             raise
         batch = res["batch_header"]["payout_batch_id"]
-        self.store.update_bill(bill_id, status="paid", payout_batch_id=batch,
+        self.store.update_bill(bill_id, status="sent", payout_batch_id=batch,
                                payout_status=res["batch_header"].get("batch_status"))
         self.store.audit(actor, "pay_bill", {"bill_id": bill_id, "amount": bill["amount"], "to": bill["supplier_email"]},
                          {"payout_batch_id": batch, "batch_status": res["batch_header"].get("batch_status")}, reason, True)
@@ -135,16 +152,19 @@ class Kassa:
             return []
         changed = []
         for b in self.store.list_bills():
-            if b.get("payout_batch_id") and b.get("payout_status") not in ("SUCCESS", "DENIED", "CANCELED"):
+            if b.get("payout_batch_id") and b.get("payout_status") not in FINAL_PAYOUT:
                 try:
                     res = self.paypal.get_payout(b["payout_batch_id"])
                 except PayPalError:
                     continue
                 items = res.get("items") or [{}]
                 st = items[0].get("transaction_status") or res["batch_header"].get("batch_status")
-                if st != b.get("payout_status"):
-                    self.store.update_bill(b["id"], payout_status=st, payout_item_id=items[0].get("payout_item_id"))
-                    changed.append({"id": b["id"], "payout_status": st})
+                new_status = payout_to_bill_status(st)
+                if st != b.get("payout_status") or new_status != b["status"]:
+                    extra = {"reason": f"PayPal returned {st}"} if new_status == "failed" else {}
+                    self.store.update_bill(b["id"], payout_status=st, status=new_status,
+                                           payout_item_id=items[0].get("payout_item_id"), **extra)
+                    changed.append({"id": b["id"], "payout_status": st, "status": new_status})
         return changed
 
     # -------------------------------------------------------- customer billing
@@ -268,12 +288,12 @@ class Kassa:
             res = self.pay_all_approved()
             paid = [r for r in res if "error" not in r]
             errs = [r for r in res if "error" in r]
-            return f"Paid {len(paid)} approved bill(s) via PayPal Payouts." + (f" Errors: {errs}" if errs else "")
+            return f"Sent {len(paid)} approved bill(s) to PayPal Payouts." + (f" Errors: {errs}" if errs else "")
         if "pay" in t and "#" in t:
             bid = int(t.split("#", 1)[1].split()[0])
             try:
                 b = self.pay_bill(bid, reason="user asked in chat")
-                return f"Paid bill #{bid}: {b['amount']} {b['currency']} to {b['supplier_email']}, payout {b['payout_batch_id']}."
+                return f"Sent bill #{bid} to PayPal: {b['amount']} {b['currency']} to {b['supplier_email']}, payout {b['payout_batch_id']}."
             except Exception as e:
                 return f"Could not pay bill #{bid}: {e}"
         if "invoice" in t and "@" in text:
@@ -293,6 +313,21 @@ class Kassa:
             return "\n".join(f"#{b['id']} {b['supplier']} {b['amount']} {b['currency']} {b['status']}" for b in bills) or "No bills."
         return ("Demo mode (no LLM key). Try: 'list bills', 'pay approved bills', 'pay #3', "
                 "'invoice Acme acme@example.com 1500 EUR for the pilot', 'refresh status'.")
+
+
+FINAL_PAYOUT = {"SUCCESS", "FAILED", "RETURNED", "REFUNDED", "REVERSED", "BLOCKED", "DENIED", "CANCELED"}
+
+
+def payout_to_bill_status(st: str | None) -> str:
+    """Bill status follows what PayPal actually says, not what we sent."""
+    st = (st or "").upper()
+    if st == "SUCCESS":
+        return "paid"
+    if st == "UNCLAIMED":
+        return "unclaimed"
+    if st in {"FAILED", "RETURNED", "REFUNDED", "REVERSED", "BLOCKED", "DENIED", "CANCELED"}:
+        return "failed"
+    return "sent"  # PENDING, PROCESSING, ONHOLD, unknown
 
 
 def _slim(b: dict) -> dict:

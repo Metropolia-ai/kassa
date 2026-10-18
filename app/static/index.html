@@ -9,16 +9,40 @@
 <link href="https://fonts.googleapis.com/css2?family=Schibsted+Grotesk:wght@400;500;600;700;800&display=swap" rel="stylesheet">
 <script src="https://cdn.jsdelivr.net/npm/ag-grid-community@33/dist/ag-grid-community.min.js"></script>
 <style>
-  :root {
-    --ledger:#EDF2EA;   /* page: ledger paper */
-    --sheet:#F8FAF6;    /* table surface */
-    --rule:#D3DDD0;     /* ruled lines */
-    --ink:#17233B;      /* main text, primary actions */
-    --pencil:#5E6B66;   /* secondary text */
+  /* Light: ledger paper. Dark: the same ledger at night, green-slate rather than black. */
+  :root, [data-theme="light"] {
+    --ledger:#E3EAE0;   /* page */
+    --sheet:#F0F4EE;    /* table surface */
+    --paper:#FAFBF8;    /* documents, inputs */
+    --rule:#C9D4C6;     /* ruled lines */
+    --hover:#E6EDE3;
+    --ink:#1B2A3F;      /* main text, primary actions */
+    --pencil:#56645E;   /* secondary text */
     --paid:#1F6B45;     /* green ink */
     --red:#B42318;      /* red ink */
-    --held:#8A5A00;     /* pencil amber for held */
+    --held:#855700;     /* amber for held */
+    --scam-bg:#F6E1DD;
+    --on-accent:#FFFFFF;
+    --shade:rgba(27,42,63,.45);
+    color-scheme:light;
     --font:'Schibsted Grotesk', system-ui, sans-serif;
+    --mono:ui-monospace, 'SF Mono', Menlo, Consolas, 'Liberation Mono', monospace;
+  }
+  [data-theme="dark"] {
+    --ledger:#151D19;
+    --sheet:#1C2621;
+    --paper:#222E28;
+    --rule:#33423A;
+    --hover:#24302A;
+    --ink:#E2E9E3;
+    --pencil:#9AA9A1;
+    --paid:#6CC796;
+    --red:#F07D72;
+    --held:#E3B65E;
+    --scam-bg:#3A201D;
+    --on-accent:#0F1612;
+    --shade:rgba(5,8,7,.6);
+    color-scheme:dark;
   }
   * { box-sizing:border-box; }
   html { background:var(--ledger); }
@@ -36,18 +60,22 @@
   .brand { font-weight:800; font-size:22px; letter-spacing:-.01em; }
   .who { color:var(--pencil); font-size:13px; }
   .top .spacer { flex:1; }
+  .limit { display:flex; align-items:center; gap:6px; font-size:13px; color:var(--pencil); }
+  .limit input { width:84px; border:1px solid var(--rule); background:var(--paper); border-radius:6px; padding:4px 8px; font-size:14px; color:var(--ink); text-align:right; }
+  .btn.sm { padding:3px 10px; font-size:13px; }
+  .top { flex-wrap:wrap; row-gap:8px; }
   .linkbtn { background:none; border:0; padding:0; color:var(--pencil); text-decoration:underline; text-underline-offset:3px; cursor:pointer; font-size:13px; }
 
   /* the one sentence that says what happened */
-  .summary { font-size:34px; line-height:1.18; font-weight:700; letter-spacing:-.02em; max-width:28ch; margin:0 0 18px; }
-  .summary .amt { color:var(--paid); }
+  .summary { font-size:21px; line-height:1.4; font-weight:500; max-width:62ch; margin:0 0 18px; }
+  .summary b { font-weight:700; }
   .summary.empty { color:var(--pencil); font-weight:600; }
   .actions { display:flex; flex-wrap:wrap; gap:10px; align-items:center; margin-bottom:36px; }
 
   .btn { border:1px solid var(--ink); background:transparent; border-radius:6px; padding:8px 14px; cursor:pointer; font-weight:600; font-size:14px; }
   .btn.solid { background:var(--ink); color:var(--sheet); }
   .btn.green { border-color:var(--paid); color:var(--paid); }
-  .btn.green.solid { background:var(--paid); color:#fff; }
+  .btn.green.solid { background:var(--paid); color:var(--on-accent); border-color:var(--paid); }
   .btn.red { border-color:var(--red); color:var(--red); }
   .btn.quiet { border-color:var(--rule); color:var(--pencil); font-weight:500; }
   .btn:disabled { opacity:.45; cursor:default; }
@@ -58,15 +86,15 @@
   h2 .count { color:var(--pencil); font-weight:500; }
   .needs { margin-bottom:40px; }
   .needs .none { color:var(--pencil); }
-  .held { border-top:1px solid var(--rule); padding:16px 0; display:grid; grid-template-columns:minmax(0,1fr) auto; gap:6px 24px; align-items:start; }
-  .held:last-child { border-bottom:1px solid var(--rule); }
-  .held .who-line { font-weight:700; font-size:16px; }
-  .held .who-line .amount { font-weight:800; margin-left:8px; }
-  .held .sub { color:var(--pencil); font-size:13px; }
-  .held .why { font-size:14px; max-width:70ch; }
-  .held .ctl { display:flex; gap:8px; align-items:center; grid-row:1 / span 3; grid-column:2; }
-  .held label { font-size:13px; color:var(--pencil); display:flex; gap:6px; align-items:center; margin-right:6px; }
-  .scam { border-left:3px solid var(--red); padding:8px 12px; background:#F9E7E4; max-width:70ch; }
+  .req { border-top:1px solid var(--rule); padding:16px 0; display:grid; grid-template-columns:minmax(0,1fr) auto; gap:6px 24px; align-items:start; }
+  .req:last-child { border-bottom:1px solid var(--rule); }
+  .req .who-line { font-weight:700; font-size:16px; }
+  .req .who-line .amount { font-weight:800; margin-left:8px; }
+  .req .sub { color:var(--pencil); font-size:13px; }
+  .req .why { font-size:14px; max-width:70ch; }
+  .req .ctl { display:flex; gap:8px; align-items:center; grid-row:1 / span 3; grid-column:2; }
+  .req label { font-size:13px; color:var(--pencil); display:flex; gap:6px; align-items:center; margin-right:6px; }
+  .scam { border-left:3px solid var(--red); padding:8px 12px; background:var(--scam-bg); max-width:70ch; }
   .scam strong { color:var(--red); display:block; margin-bottom:2px; }
   .scam ul { margin:4px 0 0; padding-left:18px; font-size:14px; }
 
@@ -80,28 +108,36 @@
   .panel { display:none; } .panel.on { display:block; }
   .grid { height:460px; width:100%; }
   .ag-root-wrapper, .ag-root-wrapper * { font-variant-numeric:normal !important; font-feature-settings:"tnum" 0 !important; }
-  .ag-cell-wrap-text { line-height:1.4 !important; padding-top:9px !important; padding-bottom:9px !important; word-break:break-word; }
+  .ag-cell { display:flex !important; align-items:center; }
+  .ag-right-aligned-cell { justify-content:flex-end; }
+  .ag-cell-wrap-text { line-height:1.45 !important; padding-top:10px !important; padding-bottom:10px !important; word-break:break-word; }
+  .ag-cell .ag-cell-wrapper, .ag-cell > span { width:100%; }
+  /* stamps are rotated, so their corners stick out of the text box: let them */
+  .ag-cell[col-id="status"] { overflow:visible !important; }
+  .ag-cell[col-id="status"] .ag-cell-wrapper, .ag-cell[col-id="status"] .ag-cell-value { overflow:visible !important; line-height:normal; }
   .below { margin-top:10px; color:var(--pencil); font-size:13px; }
   details summary { cursor:pointer; }
-  textarea { width:100%; height:110px; border:1px solid var(--rule); background:var(--sheet); border-radius:6px; padding:10px; margin:8px 0; resize:vertical; }
+  textarea { width:100%; height:110px; border:1px solid var(--rule); background:var(--paper); font-family:var(--mono); font-size:13px; border-radius:6px; padding:10px; margin:8px 0; resize:vertical; }
   .form { display:grid; grid-template-columns:repeat(3, minmax(0,1fr)); gap:10px; margin-top:10px; }
   .form label { display:flex; flex-direction:column; font-size:12px; color:var(--pencil); gap:4px; }
-  .form input { border:1px solid var(--rule); background:var(--sheet); border-radius:6px; padding:8px 10px; color:var(--ink); font-size:14px; }
+  .form input { border:1px solid var(--rule); background:var(--paper); border-radius:6px; padding:8px 10px; color:var(--ink); font-size:14px; }
   .form .wide { grid-column:span 2; }
   .form .end { align-self:end; }
 
   /* ---------- stamps: the one memorable thing ---------- */
-  .stamp { display:inline-block; font-weight:800; font-size:11px; letter-spacing:.09em; text-transform:uppercase; padding:2px 7px 1px; border:2px solid currentColor; border-radius:3px; transform:rotate(-3deg); line-height:1.35; white-space:nowrap; }
-  .stamp.paid { color:var(--paid); background:rgba(31,107,69,.08); }
+  .stamp { display:inline-block; font-weight:800; font-size:11px; letter-spacing:.09em; text-transform:uppercase; padding:2px 7px 1px; border:2px solid currentColor; border-radius:3px; transform:rotate(-3deg); line-height:1.35; white-space:nowrap; backface-visibility:hidden; will-change:transform; outline:1px solid transparent; }
+  .stamp.paid { color:var(--paid); background:color-mix(in srgb, var(--paid) 10%, transparent); }
+  .stamp.unclaimed { color:var(--held); border-style:dashed; }
   .stamp.approved { color:var(--paid); border-style:dashed; }
   .stamp.held { color:var(--held); }
   .stamp.rejected, .stamp.failed { color:var(--red); }
   .stamp.reading { color:var(--pencil); border-style:dotted; }
-  .stamp.scam { color:#fff; background:var(--red); border-color:var(--red); transform:rotate(2deg); }
+  .stamp.scam { color:var(--on-accent); background:var(--red); border-color:var(--red); transform:rotate(2deg); }
   .stamp.check { color:var(--held); border-width:1px; font-weight:700; transform:none; }
   .stamp.sent { color:var(--ink); }
-  .stamp-wrap { display:flex; flex-wrap:wrap; gap:6px; align-items:center; padding-top:2px; }
-  .payout { display:block; color:var(--pencil); font-size:12px; margin-top:3px; }
+  .stamp-wrap { display:flex; flex-wrap:wrap; gap:6px 8px; align-items:center; padding:7px 4px; position:relative; z-index:2; }
+  .status-cell { padding:2px 0; }
+  .payout { display:block; color:var(--pencil); font-size:12px; margin:-3px 0 4px 4px; }
   @keyframes thunk { 0% { transform:scale(1.6) rotate(-8deg); opacity:0; } 60% { transform:scale(.95) rotate(-3deg); opacity:1; } 100% { transform:scale(1) rotate(-3deg); } }
   .stamp.fresh { animation:thunk .35s ease-out; }
 
@@ -122,30 +158,30 @@
   .suggest { padding:0 22px 10px; display:flex; flex-wrap:wrap; gap:6px; }
   .suggest button { border:1px solid var(--rule); background:var(--ledger); border-radius:999px; padding:4px 10px; font-size:12px; cursor:pointer; color:var(--ink); }
   .ask { display:flex; gap:8px; padding:12px 22px 22px; border-top:1px solid var(--rule); }
-  .ask input { flex:1; border:1px solid var(--rule); background:#fff; border-radius:6px; padding:9px 11px; font-size:14px; }
+  .ask input { flex:1; border:1px solid var(--rule); background:var(--paper); border-radius:6px; padding:9px 11px; font-size:14px; }
 
   /* ---------- status line, toasts, dialogs ---------- */
-  .status { position:fixed; left:50%; top:14px; transform:translateX(-50%); background:var(--ink); color:var(--sheet); padding:8px 16px; border-radius:999px; font-size:14px; display:none; align-items:center; gap:10px; z-index:40; box-shadow:0 6px 24px rgba(23,35,59,.25); }
+  .status { position:fixed; left:50%; top:14px; transform:translateX(-50%); background:var(--ink); color:var(--sheet); padding:8px 16px; border-radius:999px; font-size:14px; display:none; align-items:center; gap:10px; z-index:40; box-shadow:0 6px 24px var(--shade); }
   .status.on { display:flex; }
   .status::before { content:''; width:12px; height:12px; border:2px solid var(--sheet); border-top-color:transparent; border-radius:50%; animation:spin .8s linear infinite; }
   @keyframes spin { to { transform:rotate(360deg); } }
-  .toast { position:fixed; left:24px; bottom:24px; background:var(--sheet); border:1px solid var(--rule); border-left:4px solid var(--paid); padding:12px 16px; border-radius:6px; max-width:440px; font-size:14px; z-index:50; box-shadow:0 8px 28px rgba(23,35,59,.18); }
+  .toast { position:fixed; left:24px; bottom:24px; background:var(--sheet); border:1px solid var(--rule); border-left:4px solid var(--paid); padding:12px 16px; border-radius:6px; max-width:440px; font-size:14px; z-index:50; box-shadow:0 8px 28px var(--shade); }
   .toast.bad { border-left-color:var(--red); }
 
   dialog { border:1px solid var(--rule); border-radius:8px; padding:0; background:var(--sheet); color:var(--ink); max-width:min(760px, 92vw); width:100%; }
-  dialog::backdrop { background:rgba(23,35,59,.45); }
+  dialog::backdrop { background:var(--shade); }
   .dlg { padding:22px 26px; }
   .dlg h3 { margin:0 0 12px; font-size:20px; display:flex; gap:12px; align-items:center; }
   .dlg h3 .x { margin-left:auto; }
   .kv { width:100%; border-collapse:collapse; font-size:14px; margin-bottom:12px; }
   .kv th { text-align:left; color:var(--pencil); font-weight:500; padding:4px 14px 4px 0; vertical-align:top; width:150px; white-space:nowrap; }
   .kv td { padding:4px 0; white-space:pre-wrap; word-break:break-word; border-bottom:1px solid var(--rule); }
-  .paper { background:#fff; border:1px solid var(--rule); padding:16px 18px; white-space:pre-wrap; word-break:break-word; font-size:13px; line-height:1.55; max-height:340px; overflow:auto; }
+  .paper { background:var(--paper); border:1px solid var(--rule); padding:16px 18px; white-space:pre; overflow-x:auto; font-family:var(--mono); font-size:13px; line-height:1.6; max-height:340px; overflow:auto; }
   .dlg h4 { margin:14px 0 6px; font-size:14px; color:var(--pencil); font-weight:600; }
 
   .gate { max-width:400px; }
   .gate p { color:var(--pencil); font-size:14px; margin:0 0 14px; }
-  .gate input { width:100%; border:1px solid var(--rule); border-radius:6px; padding:10px 12px; background:#fff; margin-bottom:6px; }
+  .gate input { width:100%; border:1px solid var(--rule); border-radius:6px; padding:10px 12px; background:var(--paper); margin-bottom:6px; }
   .gate .err { color:var(--red); font-size:13px; min-height:18px; margin-bottom:8px; }
 
   body.working .btn, body.working .suggest button { pointer-events:none; opacity:.5; }
@@ -156,7 +192,7 @@
     .log { max-height:420px; }
     main { padding:22px 20px 40px; }
     .summary { font-size:26px; }
-    .held { grid-template-columns:1fr; } .held .ctl { grid-row:auto; grid-column:1; flex-wrap:wrap; }
+    .req { grid-template-columns:1fr; } .req .ctl { grid-row:auto; grid-column:1; flex-wrap:wrap; }
     .form { grid-template-columns:1fr 1fr; }
   }
   @media (prefers-reduced-motion:reduce) { *, *::before { animation:none !important; transition:none !important; } }
@@ -181,6 +217,13 @@
     <div class="brand">Kassa</div>
     <div class="who" id="who"></div>
     <div class="spacer"></div>
+    <form class="limit" id="limit-form" title="Kassa pays trusted suppliers on its own up to this amount">
+      <label for="limit-in">Pays on its own up to</label>
+      <input id="limit-in" type="number" min="0" step="1" inputmode="decimal">
+      <span id="limit-cur">EUR</span>
+      <button class="btn quiet sm" type="submit" id="limit-save" hidden>Save</button>
+    </form>
+    <button class="linkbtn" id="theme" type="button"></button>
     <button class="linkbtn" id="lock" title="Forget the access key in this browser">Lock</button>
   </div>
 
@@ -239,7 +282,7 @@
 </main>
 
 <aside aria-label="Ask Kassa">
-  <header><h2>Ask Kassa</h2><p>It can list, pay approved bills and send invoices. It cannot approve payments.</p></header>
+  <header><h2>Ask Kassa</h2><p>It can look up bills, pay the approved ones and send invoices. It cannot approve a payment.</p></header>
   <div class="log" id="log"></div>
   <div class="suggest" id="suggest">
     <button>What is waiting for me and why?</button>
@@ -276,13 +319,26 @@ $('gate-form').addEventListener('submit', async e => {
 $('gate').addEventListener('cancel', e => e.preventDefault());
 $('lock').onclick = () => { localStorage.removeItem(KEY_NAME); askKey(''); };
 
+/* ---------- theme ---------- */
+const THEME_KEY = 'kassa_theme';
+function applyTheme(t) { document.documentElement.dataset.theme = t; $('theme').textContent = t === 'dark' ? 'Light theme' : 'Dark theme'; }
+applyTheme(localStorage.getItem(THEME_KEY) || (matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light'));
+$('theme').onclick = () => { const t = document.documentElement.dataset.theme === 'dark' ? 'light' : 'dark'; localStorage.setItem(THEME_KEY, t); applyTheme(t); };
+
+/* ---------- auto-pay limit ---------- */
+$('limit-in').addEventListener('input', () => { $('limit-save').hidden = Number($('limit-in').value) === CFG.auto_pay_limit; });
+$('limit-form').onsubmit = e => { e.preventDefault(); const v = Number($('limit-in').value);
+  act(() => api('/settings', {method:'PUT', body:JSON.stringify({auto_pay_limit:v})}), 'Saving the limit…', `Kassa now pays trusted suppliers on its own up to ${money(v, CFG.currency)}. Bills already read keep their decision.`)
+    .then(() => { $('limit-save').hidden = true; }); };
+
 /* ---------- status line and toasts ---------- */
 function working(text) { const s = $('status'); if (text) { s.textContent = text; s.classList.add('on'); document.body.classList.add('working'); } else { s.classList.remove('on'); document.body.classList.remove('working'); } }
 function toast(text, bad) { const t = document.createElement('div'); t.className = 'toast' + (bad ? ' bad' : ''); t.setAttribute('role', 'status'); t.textContent = text; document.body.appendChild(t); setTimeout(() => t.remove(), bad ? 8000 : 4500); }
 async function act(fn, text, done) { working(text); try { const r = await fn(); if (done) toast(typeof done === 'function' ? done(r) : done); } catch (err) { toast(err.message, true); } finally { working(null); } await load(); }
 
 /* ---------- stamps ---------- */
-const STAMP = {paid:['paid','Paid'], approved:['approved','Approved'], needs_approval:['held','Held'], rejected:['rejected','Rejected'], failed:['failed','Failed'], paying:['reading','Paying'], received:['reading','Reading'], extracted:['reading','Reading']};
+const STAMP = {paid:['paid','Paid'], sent:['sent','Sent'], unclaimed:['unclaimed','Unclaimed'], approved:['approved','Approved'], needs_approval:['held','Held'], rejected:['rejected','Rejected'], failed:['failed','Failed'], paying:['sent','Sending'], received:['reading','Reading'], extracted:['reading','Reading']};
+const STATUS_WORD = {paid:'Paid. PayPal confirmed the payout.', sent:'Sent to PayPal, waiting for confirmation.', unclaimed:'Sent, but the recipient has no PayPal account yet. The money waits for them.', approved:'Approved, ready to pay.', needs_approval:'Held for your decision.', rejected:'Rejected.', failed:'PayPal did not complete the payment.', paying:'Sending to PayPal.'};
 const INV = {SENT:['sent','Sent'], UNPAID:['sent','Unpaid'], PAID:['paid','Paid'], MARKED_AS_PAID:['paid','Paid'], DRAFT:['reading','Draft'], CANCELLED:['rejected','Cancelled'], PARTIALLY_PAID:['approved','Part paid']};
 const seen = new Map();
 function stampHtml(kind, label, key, val) { const fresh = key && seen.has(key) && seen.get(key) !== val; if (key) seen.set(key, val); return `<span class="stamp ${kind}${fresh ? ' fresh' : ''}">${esc(label)}</span>`; }
@@ -291,15 +347,15 @@ function billStatus(b) {
   let h = stampHtml(k, l, 'b' + b.id, b.status);
   if (b.risk_level === 'high') h += `<span class="stamp scam" title="${esc((b.risk_signals || []).join('; '))}">Scam risk</span>`;
   else if (b.risk_level === 'medium') h += `<span class="stamp check" title="${esc((b.risk_signals || []).join('; '))}">Check</span>`;
-  const po = b.payout_status ? `<span class="payout" title="${b.payout_status === 'UNCLAIMED' ? 'The recipient has no PayPal sandbox account. The money waits for them. This is normal in the sandbox.' : ''}">PayPal: ${esc(b.payout_status.toLowerCase())}</span>` : '';
-  return `<div class="stamp-wrap">${h}</div>${po}`;
+  return `<div class="status-cell" title="${esc(STATUS_WORD[b.status] || '')}"><div class="stamp-wrap">${h}</div></div>`;
 }
 
 /* ---------- grids ---------- */
+/* Grid colours come from the same CSS variables, so switching the theme recolours the grids too. */
 const theme = agGrid.themeQuartz.withParams({
-  fontFamily:"'Schibsted Grotesk', system-ui, sans-serif", fontSize:14, backgroundColor:'#F8FAF6', foregroundColor:'#17233B',
-  headerBackgroundColor:'#EDF2EA', headerTextColor:'#5E6B66', headerFontWeight:600, borderColor:'#D3DDD0',
-  accentColor:'#1F6B45', rowHoverColor:'#EEF4EC', wrapperBorderRadius:4, borderRadius:4, spacing:7,
+  fontFamily:"'Schibsted Grotesk', system-ui, sans-serif", fontSize:14, backgroundColor:'var(--sheet)', foregroundColor:'var(--ink)',
+  headerBackgroundColor:'var(--ledger)', headerTextColor:'var(--pencil)', headerFontWeight:600, borderColor:'var(--rule)',
+  accentColor:'var(--paid)', rowHoverColor:'var(--hover)', wrapperBorderRadius:4, borderRadius:4, spacing:7,
 });
 const base = (cols, extra = {}) => ({ theme, columnDefs:cols, rowData:[], defaultColDef:{sortable:true, resizable:true, flex:1, minWidth:90, suppressHeaderMenuButton:true}, tooltipShowDelay:250, getRowId:p => String(p.data.id), animateRows:true, ...extra });
 
@@ -308,9 +364,9 @@ const billsGrid = agGrid.createGrid($('grid-bills'), base([
   {field:'invoice_number', headerName:'Invoice', minWidth:130, maxWidth:150, wrapText:true, autoHeight:true},
   {field:'due_date', headerName:'Due', minWidth:122, maxWidth:126},
   {field:'amount', headerName:'Amount', type:'rightAligned', minWidth:110, maxWidth:130, valueFormatter:p => money(p.value, p.data.currency), cellStyle:{fontWeight:600}},
-  {field:'status', headerName:'Status', minWidth:170, maxWidth:210, wrapText:true, autoHeight:true, cellRenderer:p => billStatus(p.data)},
+  {field:'status', headerName:'Status', minWidth:170, maxWidth:220, cellRenderer:p => billStatus(p.data)},
   {field:'reason', headerName:'Why', minWidth:240, flex:3, wrapText:true, autoHeight:true},
-], {overlayNoRowsTemplate:'<span style="color:#5E6B66">No bills yet. Load the sample inbox and Kassa will read five supplier invoices.</span>',
+], {overlayNoRowsTemplate:'<span style="color:var(--pencil)">No bills yet. Load the sample inbox and Kassa will read five supplier invoices.</span>',
     onRowClicked:e => showDetail(e.data.supplier || 'Bill', billRows(e.data), e.data.raw_text)}));
 
 const invGrid = agGrid.createGrid($('grid-invoices'), base([
@@ -321,15 +377,15 @@ const invGrid = agGrid.createGrid($('grid-invoices'), base([
   {field:'due_date', headerName:'Due', minWidth:122, maxWidth:126},
   {field:'status', headerName:'Status', minWidth:120, maxWidth:150, cellRenderer:p => { const [k, l] = INV[p.value] || ['reading', p.value || '']; return `<div class="stamp-wrap">${stampHtml(k, l, 'i' + p.data.id, p.value)}</div>`; }},
   {field:'pay_url', headerName:'PayPal page', minWidth:120, maxWidth:140, sortable:false, cellRenderer:p => p.value ? `<a href="${esc(p.value)}" target="_blank" rel="noopener">Open</a>` : ''},
-], {overlayNoRowsTemplate:'<span style="color:#5E6B66">No invoices sent yet. Send the sample invoices, write a new one, or ask Kassa.</span>'}));
+], {overlayNoRowsTemplate:'<span style="color:var(--pencil)">No invoices sent yet. Send the sample invoices, write a new one, or ask Kassa.</span>'}));
 
 const auditGrid = agGrid.createGrid($('grid-audit'), base([
   {field:'ts', headerName:'When', minWidth:150, maxWidth:170, valueFormatter:p => p.value ? new Date(p.value).toLocaleString('en-GB', {day:'2-digit', month:'short', hour:'2-digit', minute:'2-digit', second:'2-digit'}) : ''},
   {field:'actor', headerName:'Who', minWidth:90, maxWidth:100, valueFormatter:p => p.value === 'agent' ? 'Kassa' : p.value === 'human' ? 'Person' : p.value},
   {field:'tool', headerName:'Action', minWidth:170, maxWidth:210, valueFormatter:p => (p.value || '').replace(/_/g, ' ')},
-  {field:'ok', headerName:'Result', minWidth:96, maxWidth:110, cellRenderer:p => p.value ? '<span style="color:#1F6B45;font-weight:600">Done</span>' : '<span style="color:#B42318;font-weight:600">Refused</span>'},
+  {field:'ok', headerName:'Result', minWidth:96, maxWidth:110, cellRenderer:p => p.value ? '<span style="color:var(--paid);font-weight:600">Done</span>' : '<span style="color:var(--red);font-weight:600">Refused</span>'},
   {field:'reason', headerName:'Reason', minWidth:260, flex:3, wrapText:true, autoHeight:true},
-], {overlayNoRowsTemplate:'<span style="color:#5E6B66">Nothing has happened yet.</span>',
+], {overlayNoRowsTemplate:'<span style="color:var(--pencil)">Nothing has happened yet.</span>',
     onRowClicked:e => showDetail((e.data.tool || '').replace(/_/g, ' '), [['When', e.data.ts], ['Who', e.data.actor], ['Result', e.data.ok ? 'Done' : 'Refused'], ['Reason', e.data.reason]], null, [['Input', e.data.input], ['Output', e.data.output]])}));
 
 /* ---------- narrow screens: keep only the columns that matter ---------- */
@@ -351,8 +407,8 @@ document.querySelectorAll('.tab').forEach(t => t.onclick = () => {
 /* ---------- detail dialog ---------- */
 function billRows(b) {
   return [['Supplier', b.supplier], ['Pay to', b.supplier_email], ['Invoice', b.invoice_number], ['Invoice date', b.invoice_date], ['Due', b.due_date],
-          ['Amount', money(b.amount, b.currency)], ['Status', b.status], ['Why', b.reason], ['Fraud risk', b.risk_level && b.risk_level !== 'low' ? b.risk_level + ': ' + (b.risk_signals || []).join('; ') : 'low'],
-          ['Read with confidence', b.confidence], ['PayPal payout', b.payout_batch_id ? b.payout_batch_id + ' (' + (b.payout_status || '') + ')' : ''], ['Source', b.source]];
+          ['Amount', money(b.amount, b.currency)], ['Status', STATUS_WORD[b.status] || b.status], ['Why', b.reason], ['Fraud risk', b.risk_level && b.risk_level !== 'low' ? b.risk_level + ': ' + (b.risk_signals || []).join('; ') : 'low'],
+          ['Read with confidence', b.confidence], ['PayPal payout', b.payout_batch_id ? b.payout_batch_id + ', PayPal says ' + (b.payout_status || 'nothing yet') : ''], ['Source', b.source]];
 }
 const pretty = v => { if (v == null) return ''; if (typeof v !== 'string') return JSON.stringify(v, null, 2); try { return JSON.stringify(JSON.parse(v), null, 2); } catch { return v; } };
 function showDetail(title, rows, paper, blocks = []) {
@@ -367,24 +423,27 @@ $('detail').addEventListener('click', e => { if (e.target === $('detail')) $('de
 /* ---------- summary and queue ---------- */
 let BILLS = [], CFG = {};
 function renderSummary(bills) {
-  const paid = bills.filter(b => b.status === 'paid'), approved = bills.filter(b => b.status === 'approved');
-  const held = bills.filter(b => b.status === 'needs_approval' || b.status === 'failed');
+  const by = st => bills.filter(b => (Array.isArray(st) ? st : [st]).includes(b.status));
   const sum = a => a.reduce((x, b) => x + (b.amount || 0), 0);
+  const plural = (n, one, many) => n + ' ' + (n === 1 ? one : many);
   const el = $('summary');
-  if (!bills.length) { el.className = 'summary empty'; el.textContent = 'No bills yet. Load the sample inbox and watch Kassa read five supplier invoices.'; return; }
+  if (!bills.length) { el.className = 'summary empty'; el.textContent = 'No bills yet. Load the sample inbox to see Kassa read five supplier invoices.'; return; }
   el.className = 'summary';
+  const paid = by('paid'), sent = by(['sent', 'paying']), unclaimed = by('unclaimed'), ready = by('approved'), held = by(['needs_approval', 'failed']);
   const parts = [];
-  if (paid.length) parts.push(`paid ${paid.length} ${paid.length === 1 ? 'bill' : 'bills'} for <span class="amt">${money(sum(paid))}</span>`);
-  if (approved.length) parts.push(`has ${approved.length} ready to pay`);
-  const holding = held.length ? `is holding ${held.length} for you` : 'needs nothing from you';
-  el.innerHTML = 'Kassa ' + (parts.length ? parts.join(', ') + ' and ' : '') + holding + '.';
+  if (paid.length) parts.push(`<b>${plural(paid.length, 'bill', 'bills')} paid</b>, ${money(sum(paid))}.`);
+  if (sent.length) parts.push(`${plural(sent.length, 'payment', 'payments')} sent to PayPal and waiting for confirmation.`);
+  if (unclaimed.length) parts.push(`${plural(unclaimed.length, 'payment', 'payments')} waiting for the recipient to claim.`);
+  if (ready.length) parts.push(`${plural(ready.length, 'bill', 'bills')} approved and ready to pay.`);
+  parts.push(held.length ? `<b>${plural(held.length, 'bill needs', 'bills need')} your decision.</b>` : 'Nothing needs your decision.');
+  el.innerHTML = parts.join(' ');
 }
 function renderQueue(items) {
   $('needs-n').textContent = items.length ? items.length : '';
   const q = $('queue');
   if (!items.length) { q.innerHTML = '<p class="none">Nothing is waiting. Kassa pays trusted suppliers under the limit on its own and brings everything else here.</p>'; return; }
   q.innerHTML = items.map(b => `
-    <div class="held">
+    <div class="req">
       <div class="who-line">${esc(b.supplier || 'Unknown sender')}<span class="amount">${money(b.amount, b.currency)}</span></div>
       <div class="sub">${esc(b.supplier_email || 'no payment address')}${b.invoice_number ? ', invoice ' + esc(b.invoice_number) : ', no invoice number'}${b.due_date ? ', due ' + esc(b.due_date) : ''}</div>
       ${b.risk_level === 'high'
@@ -414,7 +473,8 @@ $('queue').onclick = e => {
 async function load() {
   const [cfg, bills, invs, audit, chat] = await Promise.all([api('/config'), api('/bills'), api('/invoices'), api('/audit'), api('/chat')]);
   CFG = cfg; BILLS = bills;
-  $('who').textContent = `${cfg.merchant_name}, PayPal ${cfg.env}, pays on its own up to ${money(cfg.auto_pay_limit, cfg.currency)}`;
+  $('who').textContent = `${cfg.merchant_name}, PayPal ${cfg.env}`;
+  if (document.activeElement !== $('limit-in') && $('limit-save').hidden) $('limit-in').value = cfg.auto_pay_limit; $('limit-cur').textContent = cfg.currency;
   const ce = document.querySelector('#form-invoice [name=customer_email]'); if (ce && !ce.value && cfg.demo_customer_email) ce.value = cfg.demo_customer_email;
   billsGrid.setGridOption('rowData', bills); invGrid.setGridOption('rowData', invs); auditGrid.setGridOption('rowData', audit);
   $('n-bills').textContent = bills.length || ''; $('n-invoices').textContent = invs.length || ''; $('n-audit').textContent = audit.length || '';
@@ -437,14 +497,14 @@ async function loadSamples() {
     await load();
   }
 }
-$('btn-samples').onclick = () => act(loadSamples, 'Loading the sample inbox…', 'Done. Two bills are approved and ready to pay, two need you, one was a duplicate.');
+$('btn-samples').onclick = () => act(loadSamples, 'Loading the sample inbox…', 'Done. Two bills are approved and ready to pay, two need your decision, one was a duplicate.');
 $('btn-pay').onclick = () => act(async () => {
   const r = await api('/bills/pay-approved', {method:'POST'});
   if (!r.length) throw new Error('No bills are approved yet. Approve one under “Needs you” first.');
   const failed = r.filter(x => x.error);
-  if (failed.length) throw new Error(`Paid ${r.length - failed.length} of ${r.length}. ${failed[0].error}`);
+  if (failed.length) throw new Error(`Sent ${r.length - failed.length} of ${r.length}. ${failed[0].error}`);
   return r;
-}, 'Paying through PayPal Payouts…', r => `Paid ${r.length} ${r.length === 1 ? 'bill' : 'bills'} through PayPal. Check status in a minute.`);
+}, 'Sending payments to PayPal…', r => `Sent ${r.length} ${r.length === 1 ? 'payment' : 'payments'} to PayPal. They turn Paid once PayPal confirms, usually within a minute.`);
 $('btn-refresh').onclick = () => act(() => api('/refresh', {method:'POST'}), 'Checking PayPal…', 'Statuses updated from PayPal.');
 $('btn-reset').onclick = () => confirm('Clear all demo data and start over?') && act(() => api('/reset', {method:'POST'}), 'Starting over…', 'Cleared. Load the sample inbox to begin.');
 $('btn-upload').onclick = () => $('file').click();

@@ -43,6 +43,9 @@ CREATE TABLE IF NOT EXISTS audit (
   tool TEXT NOT NULL,
   input TEXT, output TEXT, reason TEXT, ok INTEGER NOT NULL
 );
+CREATE TABLE IF NOT EXISTS settings (
+  key TEXT PRIMARY KEY, value TEXT NOT NULL
+);
 CREATE TABLE IF NOT EXISTS chat (
   id INTEGER PRIMARY KEY AUTOINCREMENT, ts TEXT NOT NULL, role TEXT NOT NULL, content TEXT NOT NULL
 );
@@ -185,6 +188,16 @@ class Store:
 
     def list_customer_invoices(self) -> list[dict]:
         return [dict(r) for r in self.db.execute("SELECT * FROM customer_invoices ORDER BY id DESC").fetchall()]
+
+    # --- settings ------------------------------------------------------------
+    def get_setting(self, key: str) -> str | None:
+        row = self.db.execute("SELECT value FROM settings WHERE key=?", (key,)).fetchone()
+        return dict(row)["value"] if row else None
+
+    def set_setting(self, key: str, value: str) -> None:
+        with self._lock:
+            self.db.execute("DELETE FROM settings WHERE key=?", (key,))
+            self.db.execute("INSERT INTO settings (key, value) VALUES (?,?)", (key, value))
 
     # --- audit & chat ------------------------------------------------------
     def audit(self, actor: str, tool: str, input: Any, output: Any, reason: str | None, ok: bool) -> None:
