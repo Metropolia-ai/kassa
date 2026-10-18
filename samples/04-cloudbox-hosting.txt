@@ -1,0 +1,11 @@
+From: Cloudbox Hosting <ar@cloudbox.example.net>
+Subject: Your invoice CB-10-2291
+
+Invoice CB-10-2291
+Date: 2026-10-17
+Due: 2026-10-17
+Pay via PayPal: ar@cloudbox.example.net
+
+  Shared hosting, frappua.win, 1 month          19.90
+  Domain renewal frappua.win                    14.00
+Total: 33.90 EUR

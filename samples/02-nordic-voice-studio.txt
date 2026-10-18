@@ -1,0 +1,13 @@
+NORDIC VOICE STUDIO
+Supplier: Nordic Voice Studio
+Y-tunnus 3312345-7
+Lasku nro NVS-887
+Päiväys 12.10.2026
+Eräpäivä 2026-10-31
+
+Asiakas: Frappua, Helsinki
+Maksu PayPalilla: pay@nordicvoice.example.com
+
+Finnish voice-over, SafeSkillVR safety module, 42 lines    780.00
+Studio time 2 h                                            160.00
+Yhteensä (ALV 0 %, käännetty verovelvollisuus)   940.00 EUR

@@ -1,0 +1,94 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1520" height="760" font-family="Inter, Arial, sans-serif" font-size="14">
+<defs><marker id="a" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#333"/></marker></defs>
+<rect width="1520" height="760" fill="#fff"/>
+<text x="20" y="34" font-size="22" font-weight="700" fill="#111">Kassa: кто и как этим пользуется</text>
+<text x="20" y="56" fill="#555">Слева сценарий A: входящий счёт поставщика. Справа сценарий B: выставить счёт клиенту. Полосы = роли.</text>
+
+<!-- lanes -->
+<rect x="10" y="70" width="1500" height="130" fill="#f4f6fa" stroke="#dde3ec"/>
+<rect x="10" y="200" width="1500" height="160" fill="#eef7ff" stroke="#dde3ec"/>
+<rect x="10" y="360" width="1500" height="130" fill="#fff7e6" stroke="#dde3ec"/>
+<rect x="10" y="490" width="1500" height="130" fill="#eefaf1" stroke="#dde3ec"/>
+<g font-weight="700" fill="#333">
+<text x="22" y="128">Поставщик /</text><text x="22" y="148">клиент</text>
+<text x="22" y="270">Kassa</text><text x="22" y="290" font-weight="400" fill="#555">ИИ-агент</text>
+<text x="22" y="418">Владелец</text><text x="22" y="438" font-weight="400" fill="#555">Эрик, ~2 мин/день</text>
+<text x="22" y="548">PayPal</text><text x="22" y="568" font-weight="400" fill="#555">sandbox → live</text>
+</g>
+
+<!-- boxes -->
+<g stroke="#9aa7b8" fill="#fff" stroke-width="1.2">
+<rect x="140" y="85" width="200" height="100" rx="8"/>
+<rect x="140" y="225" width="200" height="110" rx="8"/>
+<rect x="370" y="225" width="200" height="110" rx="8"/>
+<rect x="370" y="380" width="200" height="95" rx="8" stroke="#e0a800" stroke-width="2"/>
+<rect x="600" y="225" width="200" height="110" rx="8"/>
+<rect x="600" y="510" width="200" height="95" rx="8"/>
+<rect x="830" y="380" width="200" height="95" rx="8" stroke="#e0a800" stroke-width="2"/>
+<rect x="830" y="225" width="200" height="110" rx="8"/>
+<rect x="1060" y="510" width="200" height="95" rx="8"/>
+<rect x="1060" y="85" width="200" height="100" rx="8"/>
+<rect x="1290" y="225" width="200" height="110" rx="8"/>
+</g>
+<g fill="#111">
+<text x="150" y="110" font-weight="700">A1. Присылает счёт</text>
+<text x="150" y="132">на invoices@frappua</text><text x="150" y="150">письмом, PDF или фото.</text><text x="150" y="168" fill="#555">Ничего не меняет у себя.</text>
+
+<text x="150" y="250" font-weight="700">A2. Читает счёт (Claude)</text>
+<text x="150" y="272">поставщик, email, номер,</text><text x="150" y="290">сумма, срок, уверенность,</text><text x="150" y="308">странности.</text>
+
+<text x="380" y="250" font-weight="700">A3. Проверяет политику</text>
+<text x="380" y="272">дубликат → отказ</text><text x="380" y="290">знакомый и до 500 € → авто</text><text x="380" y="308">иначе → к человеку</text>
+
+<text x="380" y="405" font-weight="700">A4. Очередь согласования</text>
+<text x="380" y="427">видит причину, жмёт</text><text x="380" y="445">Approve (+ доверять) / Reject</text>
+
+<text x="610" y="250" font-weight="700">A5. Платит одобренные</text>
+<text x="610" y="272">создаёт выплату, следит</text><text x="610" y="290">за статусом, пишет журнал</text><text x="610" y="308">с причиной каждого шага.</text>
+
+<text x="610" y="535" font-weight="700">A6. Payouts API</text>
+<text x="610" y="557">деньги уходят поставщику,</text><text x="610" y="575">статус SUCCESS.</text>
+
+<text x="840" y="405" font-weight="700">B1. Пишет в чат</text>
+<text x="840" y="427">«выстави Fläkt 15 000 €</text><text x="840" y="445">за пилот, срок 14 дней»</text>
+
+<text x="840" y="250" font-weight="700">B2. Создаёт счёт</text>
+<text x="840" y="272">Claude собирает позиции,</text><text x="840" y="290">срок, получателя и шлёт</text><text x="840" y="308">через Invoicing API.</text>
+
+<text x="1070" y="535" font-weight="700">B3. Invoicing API</text>
+<text x="1070" y="557">письмо клиенту со ссылкой</text><text x="1070" y="575">на оплату PayPal.</text>
+
+<text x="1070" y="110" font-weight="700">B4. Клиент платит</text>
+<text x="1070" y="132">по ссылке, картой или</text><text x="1070" y="150">PayPal. Статус PAID.</text>
+
+<text x="1300" y="250" font-weight="700">B5. Сверяет и отвечает</text>
+<text x="1300" y="272">тянет статусы, в чате:</text><text x="1300" y="290">«что просрочено?», «сколько</text><text x="1300" y="308">заплатили Pixelforge?»</text>
+</g>
+
+<!-- arrows -->
+<g fill="none" stroke="#333" stroke-width="1.6" marker-end="url(#a)">
+<path d="M240,185 V225"/>
+<path d="M340,280 H370"/>
+<path d="M470,335 V380"/>
+<path d="M570,280 H600"/>
+<path d="M570,427 H640 V335"/>
+<path d="M700,335 V510"/>
+<path d="M930,380 V335"/>
+<path d="M1030,280 H1100 V510"/>
+<path d="M1220,510 V185"/>
+<path d="M1260,135 H1390 V225"/>
+</g>
+<g fill="#444" font-size="12">
+<text x="478" y="362">нужен человек</text>
+<text x="572" y="270">авто</text>
+<text x="706" y="430">оплата</text>
+<text x="1226" y="360">ссылка</text>
+<text x="1300" y="200">PAID</text>
+</g>
+
+<!-- footer -->
+<text x="20" y="655" font-weight="700" fill="#111">Кто это в жизни</text>
+<text x="20" y="677" fill="#333">Пользователь один: владелец или бухгалтер маленькой компании (у нас Эрик). Он заходит раз в день в очередь и в чат. Всё остальное агент делает сам.</text>
+<text x="20" y="697" fill="#333">Агент никогда не платит без состояния «approved», а поставить его может только политика или человек. Поэтому ошибка модели стоит максимум лишнего вопроса, а не денег.</text>
+<text x="20" y="717" fill="#333">Для судей: кнопка «Load sample inbox» запускает сценарий A на пяти образцах, чат запускает сценарий B. Следующий шаг: уведомления в Telegram о новых согласованиях.</text>
+</svg>

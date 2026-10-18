@@ -1,0 +1,21 @@
+From: Pixelforge Oy <billing@pixelforge.example.com>
+To: invoices@frappua.example
+Subject: Invoice PF-2026-0412 — GPU render hours, October
+
+Hei,
+
+attached is our invoice for the render farm hours used by Frappua in the first half of October.
+
+Invoice number: PF-2026-0412
+Invoice date: 15.10.2026
+Due date: 29.10.2026
+Payment: PayPal to sb-zkzff53386438@personal.example.com
+
+  GPU render hours (RTX, 38 h × 6.50)      247.00
+  Storage, 2 TB, half month                  12.00
+  Subtotal                                  259.00
+  VAT 25.5 %                                 66.05
+Total EUR                                   325.05
+
+Kiitos ja terveisin,
+Pixelforge Oy

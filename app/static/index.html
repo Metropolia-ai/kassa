@@ -1,0 +1,188 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Kassa — agentic AP/AR on PayPal</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="https://cdn.jsdelivr.net/npm/ag-grid-community@33/dist/ag-grid-community.min.js"></script>
+<style>
+  :root { --bg:#0f1115; --panel:#171a21; --line:#262b36; --text:#e8eaf0; --muted:#8b93a7; --accent:#ffc439; --ok:#3ddc84; --warn:#ffb020; --bad:#ff5c5c; }
+  * { box-sizing:border-box; }
+  body { margin:0; font:14px/1.45 Inter, system-ui, sans-serif; background:var(--bg); color:var(--text); }
+  header { display:flex; align-items:center; gap:16px; padding:12px 20px; border-bottom:1px solid var(--line); }
+  header h1 { font-size:18px; margin:0; letter-spacing:.3px; } header h1 span { color:var(--accent); }
+  header .meta { color:var(--muted); font-size:12px; margin-left:auto; }
+  main { display:grid; grid-template-columns: 1fr 380px; gap:16px; padding:16px 20px; }
+  section { background:var(--panel); border:1px solid var(--line); border-radius:10px; padding:12px; }
+  section h2 { font-size:13px; text-transform:uppercase; letter-spacing:.8px; color:var(--muted); margin:0 0 10px; display:flex; align-items:center; gap:10px; }
+  .stack { display:flex; flex-direction:column; gap:16px; min-width:0; }
+  .toolbar { display:flex; gap:8px; flex-wrap:wrap; margin-left:auto; }
+  button { background:#232838; color:var(--text); border:1px solid var(--line); border-radius:6px; padding:6px 10px; cursor:pointer; font:inherit; font-size:12px; }
+  button.primary { background:var(--accent); color:#111; border-color:transparent; font-weight:600; }
+  button.ok { border-color:var(--ok); color:var(--ok); } button.bad { border-color:var(--bad); color:var(--bad); }
+  button:disabled { opacity:.5; cursor:default; }
+  .grid { height:260px; width:100%; }
+  .grid.tall { height:320px; }
+  .queue { display:flex; flex-direction:column; gap:8px; max-height:360px; overflow:auto; }
+  .card { border:1px solid var(--line); border-radius:8px; padding:10px; background:#12151c; }
+  .card b { font-size:14px; } .card .why { color:var(--warn); font-size:12px; margin:6px 0; }
+  .card .row { display:flex; gap:6px; align-items:center; flex-wrap:wrap; }
+  .card label { font-size:12px; color:var(--muted); }
+  .chat { display:flex; flex-direction:column; height:460px; }
+  .log { flex:1; overflow:auto; display:flex; flex-direction:column; gap:8px; padding:4px; }
+  .msg { padding:8px 10px; border-radius:8px; max-width:95%; white-space:pre-wrap; word-break:break-word; }
+  .msg.user { align-self:flex-end; background:#2a3144; } .msg.assistant { align-self:flex-start; background:#1d2230; border:1px solid var(--line); }
+  .chat form { display:flex; gap:6px; margin-top:8px; } .chat input { flex:1; padding:8px; border-radius:6px; border:1px solid var(--line); background:#0f1115; color:var(--text); font:inherit; }
+  textarea { width:100%; height:90px; background:#0f1115; color:var(--text); border:1px solid var(--line); border-radius:6px; padding:8px; font:12px/1.4 ui-monospace, monospace; }
+  .pill { display:inline-block; padding:1px 8px; border-radius:999px; font-size:11px; font-weight:600; }
+  .s-approved{background:#1b3a2a;color:var(--ok)} .s-paid{background:#1b3a2a;color:var(--ok)} .s-needs_approval{background:#3a2f12;color:var(--warn)}
+  .s-rejected{background:#3a1b1b;color:var(--bad)} .s-failed{background:#3a1b1b;color:var(--bad)} .s-paying{background:#1f2a3a;color:#7fb6ff} .s-extracted,.s-received{background:#232838;color:var(--muted)}
+  .s-SENT,.s-UNPAID{background:#1f2a3a;color:#7fb6ff} .s-PAID{background:#1b3a2a;color:var(--ok)} .s-DRAFT{background:#232838;color:var(--muted)}
+  .hint { color:var(--muted); font-size:12px; }
+  a { color:#7fb6ff; }
+  @media (max-width:1100px){ main{grid-template-columns:1fr} }
+</style>
+</head>
+<body>
+<header>
+  <h1>Kassa <span>·</span> agentic AP/AR on PayPal</h1>
+  <div class="meta" id="meta">…</div>
+</header>
+<main>
+  <div class="stack">
+    <section>
+      <h2>Inbox → supplier bills
+        <div class="toolbar">
+          <button id="btn-samples" class="primary">Load sample inbox</button>
+          <input type="file" id="file" multiple style="display:none">
+          <button id="btn-upload">Upload .txt / .eml / .pdf</button>
+          <button id="btn-pay-approved" class="ok">Pay all approved</button>
+          <button id="btn-refresh">Refresh PayPal status</button>
+          <button id="btn-reset" class="bad">Reset demo</button>
+        </div>
+      </h2>
+      <div id="bills" class="grid tall"></div>
+      <details style="margin-top:8px"><summary class="hint">Paste an invoice as text</summary>
+        <textarea id="paste" placeholder="From: Supplier <billing@…>&#10;Invoice number: …&#10;Total EUR 123.45"></textarea>
+        <button id="btn-paste">Send to agent</button>
+      </details>
+    </section>
+    <section>
+      <h2>Customer invoices (PayPal Invoicing)
+        <div class="toolbar"><span class="hint">Create them from chat: “invoice Fläkt pilot 15000 EUR to buyer@example.com, due 14 days”</span></div>
+      </h2>
+      <div id="invoices" class="grid"></div>
+    </section>
+    <section>
+      <h2>Audit log <span class="hint">every tool call, with the agent's reason</span></h2>
+      <div id="audit" class="grid"></div>
+    </section>
+  </div>
+  <div class="stack">
+    <section>
+      <h2>Approval queue <span class="hint" id="queue-count"></span></h2>
+      <div id="queue" class="queue"><div class="hint">Nothing waiting.</div></div>
+    </section>
+    <section class="chat">
+      <h2>Talk to Kassa</h2>
+      <div id="log" class="log"></div>
+      <form id="chat"><input id="chat-in" placeholder="pay approved bills · what is overdue? · invoice …" autocomplete="off"><button class="primary">Send</button></form>
+    </section>
+  </div>
+</main>
+<script>
+const api = (p, o={}) => fetch('/api'+p, {headers:{'Content-Type':'application/json'}, ...o}).then(async r => { const j = await r.json().catch(()=>({})); if(!r.ok) throw new Error(j.error || JSON.stringify(j)); return j; });
+const pill = s => `<span class="pill s-${s}">${s}</span>`;
+const money = (v,c) => v==null ? '' : new Intl.NumberFormat('fi-FI',{style:'currency',currency:c||'EUR'}).format(v);
+const fmtTs = t => t ? t.replace('T',' ').slice(0,19) : '';
+
+const darkTheme = agGrid.themeQuartz.withPart(agGrid.colorSchemeDark).withParams({backgroundColor:'#12151c', headerBackgroundColor:'#171a21', borderColor:'#262b36', foregroundColor:'#e8eaf0', fontSize:12, rowHoverColor:'#1d2230', accentColor:'#ffc439'});
+const gridOpts = (cols, extra={}) => ({ theme: darkTheme, columnDefs: cols, rowData: [], defaultColDef:{sortable:true, filter:true, resizable:true, flex:1, minWidth:90}, animateRows:true, getRowId: p => String(p.data.id), ...extra });
+const billsGrid = agGrid.createGrid(document.getElementById('bills'), gridOpts([
+  {field:'id', headerName:'#', maxWidth:60},
+  {field:'supplier', headerName:'Supplier', minWidth:150},
+  {field:'invoice_number', headerName:'Invoice №'},
+  {field:'due_date', headerName:'Due'},
+  {field:'amount', headerName:'Amount', valueFormatter:p=>money(p.value,p.data.currency), type:'rightAligned'},
+  {field:'status', headerName:'Status', cellRenderer:p=>pill(p.value)},
+  {field:'reason', headerName:'Why', minWidth:260, tooltipField:'reason'},
+  {field:'payout_status', headerName:'Payout'},
+], {rowSelection:{mode:'singleRow'}, onRowSelected: showBill}));
+const invGrid = agGrid.createGrid(document.getElementById('invoices'), gridOpts([
+  {field:'invoice_number', headerName:'Invoice №'},
+  {field:'customer_name', headerName:'Customer', minWidth:140},
+  {field:'customer_email', headerName:'Email', minWidth:200},
+  {field:'amount', headerName:'Amount', valueFormatter:p=>money(p.value,p.data.currency), type:'rightAligned'},
+  {field:'due_date', headerName:'Due'},
+  {field:'status', headerName:'PayPal status', cellRenderer:p=>pill(p.value||'')},
+  {field:'pay_url', headerName:'Link', cellRenderer:p=>p.value?`<a href="${p.value}" target="_blank">open</a>`:''},
+]));
+const auditGrid = agGrid.createGrid(document.getElementById('audit'), gridOpts([
+  {field:'ts', headerName:'Time', valueFormatter:p=>fmtTs(p.value), minWidth:150},
+  {field:'actor', headerName:'Actor', maxWidth:90},
+  {field:'tool', headerName:'Tool', minWidth:160},
+  {field:'ok', headerName:'OK', maxWidth:60, cellRenderer:p=>p.value?'✓':'✗'},
+  {field:'reason', headerName:'Reason', minWidth:220, tooltipField:'reason'},
+  {field:'input', headerName:'Input', minWidth:200, tooltipField:'input'},
+  {field:'output', headerName:'Output', minWidth:200, tooltipField:'output'},
+]));
+
+async function load() {
+  const [cfg, bills, invs, audit, chat] = await Promise.all([api('/config'), api('/bills'), api('/invoices'), api('/audit'), api('/chat')]);
+  document.getElementById('meta').textContent = `${cfg.merchant_name} · ${cfg.env} · PayPal ${cfg.paypal?'connected':'not configured'} · LLM: ${cfg.llm} · auto-pay ≤ ${cfg.auto_pay_limit} ${cfg.currency}`;
+  billsGrid.setGridOption('rowData', bills);
+  invGrid.setGridOption('rowData', invs);
+  auditGrid.setGridOption('rowData', audit);
+  renderQueue(bills.filter(b => b.status==='needs_approval' || b.status==='failed'));
+  renderChat(chat);
+}
+function renderQueue(items) {
+  const q = document.getElementById('queue');
+  document.getElementById('queue-count').textContent = items.length ? `${items.length} waiting` : '';
+  if (!items.length) { q.innerHTML = '<div class="hint">Nothing waiting. Policy auto-approves known suppliers under the limit.</div>'; return; }
+  q.innerHTML = items.map(b => `
+    <div class="card">
+      <b>#${b.id} ${b.supplier||'(unknown supplier)'}</b> — ${money(b.amount,b.currency)} ${b.invoice_number?`· ${b.invoice_number}`:''}<br>
+      <span class="hint">${b.supplier_email||'no PayPal email'} · due ${b.due_date||'?'}</span>
+      <div class="why">⚠ ${b.reason||''}</div>
+      <div class="row">
+        <button class="ok" data-act="approve" data-id="${b.id}">Approve</button>
+        <label><input type="checkbox" data-trust="${b.id}"> trust supplier</label>
+        <button class="bad" data-act="reject" data-id="${b.id}">Reject</button>
+      </div>
+    </div>`).join('');
+}
+function renderChat(msgs) {
+  const log = document.getElementById('log');
+  log.innerHTML = msgs.map(m => `<div class="msg ${m.role}">${esc(m.content)}</div>`).join('');
+  log.scrollTop = log.scrollHeight;
+}
+const esc = s => String(s).replace(/[&<>]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;'}[c]));
+function showBill(e){ if(!e.node.isSelected()) return; const b=e.data; console.log(b.raw_text); }
+
+async function act(fn){ try { await fn(); } catch(err) { alert(err.message); } await load(); }
+document.getElementById('btn-samples').onclick = () => act(() => api('/bills/samples', {method:'POST'}));
+document.getElementById('btn-pay-approved').onclick = () => act(() => api('/bills/pay-approved', {method:'POST'}));
+document.getElementById('btn-refresh').onclick = () => act(() => api('/refresh', {method:'POST'}));
+document.getElementById('btn-reset').onclick = () => confirm('Clear all demo data?') && act(() => api('/reset', {method:'POST'}));
+document.getElementById('btn-paste').onclick = () => act(async () => { const t = document.getElementById('paste').value.trim(); if(!t) return; await api('/bills/text', {method:'POST', body:JSON.stringify({text:t, source:'paste'})}); document.getElementById('paste').value=''; });
+document.getElementById('btn-upload').onclick = () => document.getElementById('file').click();
+document.getElementById('file').onchange = e => act(async () => { const fd = new FormData(); for (const f of e.target.files) fd.append('files', f); const r = await fetch('/api/bills/upload', {method:'POST', body:fd}); if(!r.ok) throw new Error(await r.text()); e.target.value=''; });
+document.getElementById('queue').onclick = e => {
+  const btn = e.target.closest('button[data-act]'); if(!btn) return;
+  const id = btn.dataset.id;
+  if (btn.dataset.act==='approve') { const trust = document.querySelector(`input[data-trust="${id}"]`).checked; act(() => api(`/bills/${id}/approve`, {method:'POST', body:JSON.stringify({trust_supplier:trust})})); }
+  else { const reason = prompt('Reason for rejecting?', 'not a valid invoice'); if (reason!=null) act(() => api(`/bills/${id}/reject`, {method:'POST', body:JSON.stringify({reason})})); }
+};
+document.getElementById('chat').onsubmit = async e => {
+  e.preventDefault(); const inp = document.getElementById('chat-in'); const m = inp.value.trim(); if(!m) return; inp.value='';
+  const log = document.getElementById('log'); log.insertAdjacentHTML('beforeend', `<div class="msg user">${esc(m)}</div><div class="msg assistant" id="pending">…</div>`); log.scrollTop = log.scrollHeight;
+  try { const r = await api('/chat', {method:'POST', body:JSON.stringify({message:m})}); document.getElementById('pending').textContent = r.reply; }
+  catch(err) { document.getElementById('pending').textContent = 'Error: ' + err.message; }
+  await load();
+};
+load();
+setInterval(load, 15000);
+</script>
+</body>
+</html>
