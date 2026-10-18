@@ -109,7 +109,8 @@ def config():
     return {"merchant_name": kassa.merchant_name, "merchant_email": kassa.merchant_email,
             "currency": kassa.currency, "auto_pay_limit": kassa.auto_pay_limit,
             "paypal": bool(kassa.paypal), "env": os.environ.get("PAYPAL_ENV", "sandbox"),
-            "llm": (f"{llm.provider()}:{llm.model_name()}" if llm.provider() else "rules (demo mode)")}
+            "llm": (f"{llm.provider()}:{llm.model_name()}" if llm.provider() else "rules (demo mode)"),
+            "demo_customer_email": os.environ.get("DEMO_CUSTOMER_EMAIL", "")}
 
 
 # --- bills ---------------------------------------------------------------
@@ -132,6 +133,11 @@ async def bill_upload(files: list[UploadFile] = File(...)):
         text = _to_text(f.filename or "upload", raw)
         out.append(kassa.ingest(f.filename or "upload", text))
     return out
+
+
+@app.get("/api/samples")
+def list_samples():
+    return [{"name": Path(x).name, "text": Path(x).read_text(encoding="utf-8")} for x in sorted(glob.glob(str(ROOT / "samples" / "*.txt")))]
 
 
 @app.post("/api/bills/samples")
