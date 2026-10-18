@@ -9,7 +9,7 @@
 <link href="https://fonts.googleapis.com/css2?family=Schibsted+Grotesk:wght@400;500;600;700;800&display=swap" rel="stylesheet">
 <script src="https://cdn.jsdelivr.net/npm/ag-grid-community@33/dist/ag-grid-community.min.js"></script>
 <style>
-  /* Light: ledger paper. Dark: the same ledger at night, green-slate rather than black. */
+  /* Light: ledger paper. Dark: neutral charcoal. */
   :root, [data-theme="light"] {
     --ledger:#E3EAE0;   /* page */
     --sheet:#F0F4EE;    /* table surface */
@@ -29,19 +29,19 @@
     --mono:ui-monospace, 'SF Mono', Menlo, Consolas, 'Liberation Mono', monospace;
   }
   [data-theme="dark"] {
-    --ledger:#151D19;
-    --sheet:#1C2621;
-    --paper:#222E28;
-    --rule:#33423A;
-    --hover:#24302A;
-    --ink:#E2E9E3;
-    --pencil:#9AA9A1;
-    --paid:#6CC796;
+    --ledger:#17181B;
+    --sheet:#1E2023;
+    --paper:#25272B;
+    --rule:#35383D;
+    --hover:#27292D;
+    --ink:#E7E8EA;
+    --pencil:#A0A4AA;
+    --paid:#5FC28B;
     --red:#F07D72;
     --held:#E3B65E;
-    --scam-bg:#3A201D;
-    --on-accent:#0F1612;
-    --shade:rgba(5,8,7,.6);
+    --scam-bg:#3A2321;
+    --on-accent:#121315;
+    --shade:rgba(0,0,0,.6);
     color-scheme:dark;
   }
   * { box-sizing:border-box; }
@@ -67,9 +67,11 @@
   .linkbtn { background:none; border:0; padding:0; color:var(--pencil); text-decoration:underline; text-underline-offset:3px; cursor:pointer; font-size:13px; }
 
   /* the one sentence that says what happened */
-  .summary { font-size:21px; line-height:1.4; font-weight:500; max-width:62ch; margin:0 0 18px; }
-  .summary b { font-weight:700; }
-  .summary.empty { color:var(--pencil); font-weight:600; }
+  .tally { display:flex; flex-wrap:wrap; gap:8px 36px; margin:0 0 20px; font-size:14px; }
+  .tally div { display:flex; gap:8px; align-items:baseline; }
+  .tally dt { color:var(--pencil); }
+  .tally dd { margin:0; font-weight:600; }
+  .tally:empty { display:none; }
   .actions { display:flex; flex-wrap:wrap; gap:10px; align-items:center; margin-bottom:36px; }
 
   .btn { border:1px solid var(--ink); background:transparent; border-radius:6px; padding:8px 14px; cursor:pointer; font-weight:600; font-size:14px; }
@@ -110,7 +112,7 @@
   .ag-root-wrapper, .ag-root-wrapper * { font-variant-numeric:normal !important; font-feature-settings:"tnum" 0 !important; }
   .ag-cell { display:flex !important; align-items:center; }
   .ag-right-aligned-cell { justify-content:flex-end; }
-  .ag-cell-wrap-text { line-height:1.45 !important; padding-top:10px !important; padding-bottom:10px !important; word-break:break-word; }
+  .ag-cell-wrap-text { line-height:1.45 !important; padding-top:14px !important; padding-bottom:14px !important; word-break:break-word; }
   .ag-cell .ag-cell-wrapper, .ag-cell > span { width:100%; }
   /* stamps are rotated, so their corners stick out of the text box: let them */
   .ag-cell[col-id="status"] { overflow:visible !important; }
@@ -135,7 +137,7 @@
   .stamp.scam { color:var(--on-accent); background:var(--red); border-color:var(--red); transform:rotate(2deg); }
   .stamp.check { color:var(--held); border-width:1px; font-weight:700; transform:none; }
   .stamp.sent { color:var(--ink); }
-  .stamp-wrap { display:flex; flex-wrap:wrap; gap:6px 8px; align-items:center; padding:7px 4px; position:relative; z-index:2; }
+  .stamp-wrap { display:flex; flex-wrap:nowrap; gap:8px; align-items:center; padding:6px 4px; position:relative; z-index:2; }
   .status-cell { padding:2px 0; }
   .payout { display:block; color:var(--pencil); font-size:12px; margin:-3px 0 4px 4px; }
   @keyframes thunk { 0% { transform:scale(1.6) rotate(-8deg); opacity:0; } 60% { transform:scale(.95) rotate(-3deg); opacity:1; } 100% { transform:scale(1) rotate(-3deg); } }
@@ -179,6 +181,11 @@
   .paper { background:var(--paper); border:1px solid var(--rule); padding:16px 18px; white-space:pre; overflow-x:auto; font-family:var(--mono); font-size:13px; line-height:1.6; max-height:340px; overflow:auto; }
   .dlg h4 { margin:14px 0 6px; font-size:14px; color:var(--pencil); font-weight:600; }
 
+  .howto { max-width:680px; }
+  .howto .lead { margin:0 0 14px; max-width:68ch; }
+  .howto .steps { margin:0 0 14px; padding-left:22px; display:flex; flex-direction:column; gap:9px; max-width:68ch; }
+  .howto .steps li::marker { font-weight:700; color:var(--pencil); }
+  .howto .fine { color:var(--pencil); font-size:14px; margin:0 0 16px; max-width:68ch; }
   .gate { max-width:400px; }
   .gate p { color:var(--pencil); font-size:14px; margin:0 0 14px; }
   .gate input { width:100%; border:1px solid var(--rule); border-radius:6px; padding:10px 12px; background:var(--paper); margin-bottom:6px; }
@@ -211,6 +218,21 @@
 
 <dialog id="detail"><div class="dlg" id="detail-body"></div></dialog>
 
+<dialog id="howto" aria-labelledby="howto-h"><div class="dlg howto">
+  <h3 id="howto-h">How to test Kassa<button class="btn quiet x" id="howto-close">Close</button></h3>
+  <p class="lead">Kassa is an AI bookkeeper for a small company. It reads supplier invoices, pays the ones that pass the payment policy through PayPal Payouts, holds the rest for a person, and bills customers through PayPal Invoicing. Everything runs in the PayPal sandbox: no real money moves.</p>
+  <ol class="steps">
+    <li><b>Load sample inbox.</b> The model reads five supplier invoices. Two are approved on their own because the suppliers are trusted and the amounts are under the limit. Two wait under “Needs you”. One is caught as a duplicate.</li>
+    <li><b>Look at the bill from “Finance Dept”.</b> It is a typical invoice scam: urgency, secrecy, a new account, a sender domain that imitates the company. Kassa lists the signals and holds it even though nothing technical is wrong. Reject it, or approve it to see what happens.</li>
+    <li><b>Approve Nordic Voice Studio</b>, tick “Trust this supplier”, then press <b>Pay approved bills</b>. All approved bills go to PayPal Payouts. Their stamp turns from Sent to Paid when PayPal confirms; “Check PayPal status” asks PayPal right away.</li>
+    <li><b>Open “Invoices sent” and press Send sample invoices.</b> Three customer invoices go out through PayPal. “Open” shows the page the customer gets.</li>
+    <li><b>Ask Kassa</b> on the right, for example “What is waiting for me and why?” or “Invoice Acme Oy 1500 EUR for the pilot, due in 14 days”. The agent works through tools. It can pay what is approved, but it cannot approve a payment itself.</li>
+    <li><b>Check “Activity”.</b> Every action by Kassa or a person is recorded with the reason given at the time, including refusals.</li>
+  </ol>
+  <p class="fine">Try changing “Pays on its own up to” in the header and loading the inbox again. “Start over” clears all demo data. Click any row to see the full record and the original invoice text.</p>
+  <button class="btn solid" id="howto-go">Load sample inbox</button>
+</div></dialog>
+
 <div class="app">
 <main>
   <div class="top">
@@ -223,11 +245,12 @@
       <span id="limit-cur">EUR</span>
       <button class="btn quiet sm" type="submit" id="limit-save" hidden>Save</button>
     </form>
+    <button class="linkbtn" id="howto-open" type="button">How to test</button>
     <button class="linkbtn" id="theme" type="button"></button>
     <button class="linkbtn" id="lock" title="Forget the access key in this browser">Lock</button>
   </div>
 
-  <p class="summary empty" id="summary">No bills yet.</p>
+  <dl class="tally" id="summary" aria-label="Totals"></dl>
   <div class="actions">
     <button class="btn solid" id="btn-samples">Load sample inbox</button>
     <button class="btn green" id="btn-pay">Pay approved bills</button>
@@ -239,7 +262,7 @@
 
   <section class="needs" aria-labelledby="needs-h">
     <h2 id="needs-h">Needs you <span class="count" id="needs-n"></span></h2>
-    <div id="queue"><p class="none">Nothing is waiting. Kassa pays trusted suppliers under the limit on its own and brings everything else here.</p></div>
+    <div id="queue"><p class="none">Nothing is waiting. Kassa approves trusted suppliers under the limit on its own and brings everything else here.</p></div>
   </section>
 
   <div class="tabs" role="tablist">
@@ -314,7 +337,7 @@ function askKey(msg) { $('gate-err').textContent = msg || ''; $('gate-key').valu
 $('gate-form').addEventListener('submit', async e => {
   e.preventDefault(); const k = $('gate-key').value.trim(); if (!k) return;
   localStorage.setItem(KEY_NAME, k);
-  try { await api('/config'); $('gate').close(); await load(); } catch (err) { localStorage.removeItem(KEY_NAME); }
+  try { await api('/config'); $('gate').close(); await load(); if (!localStorage.getItem(HOWTO_KEY)) openHowto(); } catch (err) { localStorage.removeItem(KEY_NAME); }
 });
 $('gate').addEventListener('cancel', e => e.preventDefault());
 $('lock').onclick = () => { localStorage.removeItem(KEY_NAME); askKey(''); };
@@ -324,6 +347,14 @@ const THEME_KEY = 'kassa_theme';
 function applyTheme(t) { document.documentElement.dataset.theme = t; $('theme').textContent = t === 'dark' ? 'Light theme' : 'Dark theme'; }
 applyTheme(localStorage.getItem(THEME_KEY) || (matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light'));
 $('theme').onclick = () => { const t = document.documentElement.dataset.theme === 'dark' ? 'light' : 'dark'; localStorage.setItem(THEME_KEY, t); applyTheme(t); };
+
+/* ---------- how to test ---------- */
+const HOWTO_KEY = 'kassa_howto_seen';
+function openHowto() { if (!$('howto').open) $('howto').showModal(); }
+$('howto-open').onclick = openHowto;
+$('howto-close').onclick = () => { localStorage.setItem(HOWTO_KEY, '1'); $('howto').close(); };
+$('howto').addEventListener('close', () => localStorage.setItem(HOWTO_KEY, '1'));
+$('howto-go').onclick = () => { $('howto').close(); $('btn-samples').click(); };
 
 /* ---------- auto-pay limit ---------- */
 $('limit-in').addEventListener('input', () => { $('limit-save').hidden = Number($('limit-in').value) === CFG.auto_pay_limit; });
@@ -364,7 +395,7 @@ const billsGrid = agGrid.createGrid($('grid-bills'), base([
   {field:'invoice_number', headerName:'Invoice', minWidth:130, maxWidth:150, wrapText:true, autoHeight:true},
   {field:'due_date', headerName:'Due', minWidth:122, maxWidth:126},
   {field:'amount', headerName:'Amount', type:'rightAligned', minWidth:110, maxWidth:130, valueFormatter:p => money(p.value, p.data.currency), cellStyle:{fontWeight:600}},
-  {field:'status', headerName:'Status', minWidth:170, maxWidth:220, cellRenderer:p => billStatus(p.data)},
+  {field:'status', headerName:'Status', minWidth:230, maxWidth:250, cellRenderer:p => billStatus(p.data)},
   {field:'reason', headerName:'Why', minWidth:240, flex:3, wrapText:true, autoHeight:true},
 ], {overlayNoRowsTemplate:'<span style="color:var(--pencil)">No bills yet. Load the sample inbox and Kassa will read five supplier invoices.</span>',
     onRowClicked:e => showDetail(e.data.supplier || 'Bill', billRows(e.data), e.data.raw_text)}));
@@ -423,25 +454,18 @@ $('detail').addEventListener('click', e => { if (e.target === $('detail')) $('de
 /* ---------- summary and queue ---------- */
 let BILLS = [], CFG = {};
 function renderSummary(bills) {
-  const by = st => bills.filter(b => (Array.isArray(st) ? st : [st]).includes(b.status));
+  const by = st => bills.filter(b => st.includes(b.status));
   const sum = a => a.reduce((x, b) => x + (b.amount || 0), 0);
-  const plural = (n, one, many) => n + ' ' + (n === 1 ? one : many);
-  const el = $('summary');
-  if (!bills.length) { el.className = 'summary empty'; el.textContent = 'No bills yet. Load the sample inbox to see Kassa read five supplier invoices.'; return; }
-  el.className = 'summary';
-  const paid = by('paid'), sent = by(['sent', 'paying']), unclaimed = by('unclaimed'), ready = by('approved'), held = by(['needs_approval', 'failed']);
-  const parts = [];
-  if (paid.length) parts.push(`<b>${plural(paid.length, 'bill', 'bills')} paid</b>, ${money(sum(paid))}.`);
-  if (sent.length) parts.push(`${plural(sent.length, 'payment', 'payments')} sent to PayPal and waiting for confirmation.`);
-  if (unclaimed.length) parts.push(`${plural(unclaimed.length, 'payment', 'payments')} waiting for the recipient to claim.`);
-  if (ready.length) parts.push(`${plural(ready.length, 'bill', 'bills')} approved and ready to pay.`);
-  parts.push(held.length ? `<b>${plural(held.length, 'bill needs', 'bills need')} your decision.</b>` : 'Nothing needs your decision.');
-  el.innerHTML = parts.join(' ');
+  const rows = [
+    ['Paid', by(['paid'])], ['Sent to PayPal', by(['sent', 'paying'])], ['Waiting to be claimed', by(['unclaimed'])],
+    ['Approved, not paid', by(['approved'])], ['Needs your decision', by(['needs_approval', 'failed'])],
+  ].filter(([, a]) => a.length);
+  $('summary').innerHTML = rows.map(([k, a]) => `<div><dt>${k}</dt><dd>${a.length}, ${money(sum(a))}</dd></div>`).join('');
 }
 function renderQueue(items) {
   $('needs-n').textContent = items.length ? items.length : '';
   const q = $('queue');
-  if (!items.length) { q.innerHTML = '<p class="none">Nothing is waiting. Kassa pays trusted suppliers under the limit on its own and brings everything else here.</p>'; return; }
+  if (!items.length) { q.innerHTML = '<p class="none">Nothing is waiting. Kassa approves trusted suppliers under the limit on its own and brings everything else here.</p>'; return; }
   q.innerHTML = items.map(b => `
     <div class="req">
       <div class="who-line">${esc(b.supplier || 'Unknown sender')}<span class="amount">${money(b.amount, b.currency)}</span></div>
@@ -557,7 +581,7 @@ $('suggest').onclick = e => { const b = e.target.closest('button'); if (b) sendC
 (async function boot() {
   const h = await fetch('/api/health').then(r => r.json()).catch(() => ({gate:true}));
   if (h.gate && !getKey()) { askKey(''); return; }
-  try { await load(); } catch (e) {}
+  try { await load(); if (!localStorage.getItem(HOWTO_KEY) && location.hash !== '#no-guide') openHowto(); } catch (e) {}
 })();
 setInterval(() => { if (!$('gate').open && !document.body.classList.contains('working') && !chatBusy) load().catch(() => {}); }, 15000);
 </script>
