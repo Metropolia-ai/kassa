@@ -47,11 +47,14 @@
   .msg.user { align-self:flex-end; background:#2a3144; } .msg.assistant { align-self:flex-start; background:#1d2230; border:1px solid var(--line); }
   .chat form { display:flex; gap:6px; margin-top:8px; } .chat input { flex:1; padding:8px; border-radius:6px; border:1px solid var(--line); background:#0f1115; color:var(--text); font:inherit; }
   textarea { width:100%; height:90px; background:#0f1115; color:var(--text); border:1px solid var(--line); border-radius:6px; padding:8px; font:12px/1.4 ui-monospace, monospace; }
-  .pill { display:inline-block; padding:1px 8px; border-radius:999px; font-size:11px; font-weight:600; }
+  .pill { display:inline-block; margin:2px 0; padding:1px 8px; border-radius:999px; font-size:11px; font-weight:600; }
   .s-approved{background:#1b3a2a;color:var(--ok)} .s-paid{background:#1b3a2a;color:var(--ok)} .s-needs_approval{background:#3a2f12;color:var(--warn)}
   .s-rejected{background:#3a1b1b;color:var(--bad)} .s-failed{background:#3a1b1b;color:var(--bad)} .s-paying{background:#1f2a3a;color:#7fb6ff} .s-extracted,.s-received{background:#232838;color:var(--muted)}
   .s-SENT,.s-UNPAID{background:#1f2a3a;color:#7fb6ff} .s-PAID{background:#1b3a2a;color:var(--ok)} .s-DRAFT{background:#232838;color:var(--muted)}
   .hint { color:var(--muted); font-size:12px; }
+  .risk-high { background:#4a1515; color:#ff8a8a; border:1px solid #ff5c5c; } .risk-med { background:#3a2f12; color:var(--warn); }
+  .card.scam { border-color:var(--bad); background:#1d1012; } .scam-box { background:#3a1414; border:1px solid #ff5c5c; color:#ffb3b3; border-radius:6px; padding:8px; margin:6px 0; font-size:12px; }
+  .scam-box b { color:#ff8a8a; display:block; margin-bottom:4px; } .scam-box ul { margin:0; padding-left:16px; }
   a { color:#7fb6ff; }
   .ag-cell-wrap-text { line-height:1.4 !important; padding-top:8px !important; padding-bottom:8px !important; word-break:break-word; }
   #detail table.kv { width:100%; border-collapse:collapse; font-size:13px; } #detail th { text-align:left; color:var(--muted); font-weight:500; padding:3px 10px 3px 0; white-space:nowrap; vertical-align:top; width:140px; }
@@ -139,6 +142,7 @@ function askKey(msg){
   m.style.display = 'flex'; const i = document.getElementById('gate-key'); i.value = ''; setTimeout(() => i.focus(), 50);
 }
 const pill = s => `<span class="pill s-${s}">${s}</span>`;
+const riskBadge = b => b.risk_level === 'high' ? ' <span class="pill risk-high" title="' + esc((b.risk_signals||[]).join('; ')) + '">⚠ scam risk</span>' : (b.risk_level === 'medium' ? ' <span class="pill risk-med" title="' + esc((b.risk_signals||[]).join('; ')) + '">check</span>' : '');
 const money = (v,c) => v==null ? '' : new Intl.NumberFormat('fi-FI',{style:'currency',currency:c||'EUR'}).format(v);
 const fmtTs = t => t ? t.replace('T',' ').slice(0,19) : '';
 
@@ -149,24 +153,24 @@ const billsGrid = agGrid.createGrid(document.getElementById('bills'), gridOpts([
   {field:'supplier', headerName:'Supplier', minWidth:130, wrapText:true, autoHeight:true},
   {field:'invoice_number', headerName:'Invoice №', minWidth:115, maxWidth:140},
   {field:'due_date', headerName:'Due', minWidth:105, maxWidth:120},
-  {field:'amount', headerName:'Amount', valueFormatter:p=>money(p.value,p.data.currency), type:'rightAligned', minWidth:100, maxWidth:120},
-  {field:'status', headerName:'Status', minWidth:135, maxWidth:160, cellRenderer:p=>pill(p.value) + (p.data.payout_status ? ` <span class="hint">${esc(p.data.payout_status)}</span>` : '')},
+  {field:'amount', headerName:'Amount', valueFormatter:p=>money(p.value,p.data.currency), type:'rightAligned', filter:false, minWidth:100, maxWidth:120},
+  {field:'status', headerName:'Status', minWidth:150, maxWidth:190, wrapText:true, autoHeight:true, cellRenderer:p=>pill(p.value) + riskBadge(p.data) + (p.data.payout_status ? ` <span class="hint">${esc(p.data.payout_status)}</span>` : '')},
   {field:'reason', headerName:'Why', minWidth:220, flex:3, wrapText:true, autoHeight:true},
 ], {overlayNoRowsTemplate:'<div class="hint">No bills yet. Click <b>Load sample inbox</b> to let the agent read five sample invoices, or upload your own.</div>', onRowClicked: e => showDetail('Bill #'+e.data.id, e.data, ['raw_text'])}));
 const invGrid = agGrid.createGrid(document.getElementById('invoices'), gridOpts([
-  {field:'invoice_number', headerName:'Invoice №'},
-  {field:'customer_name', headerName:'Customer', minWidth:140},
+  {field:'invoice_number', headerName:'Invoice №', minWidth:120},
+  {field:'customer_name', headerName:'Customer', minWidth:160},
   {field:'customer_email', headerName:'Email', minWidth:200},
-  {field:'amount', headerName:'Amount', valueFormatter:p=>money(p.value,p.data.currency), type:'rightAligned'},
-  {field:'due_date', headerName:'Due'},
+  {field:'amount', headerName:'Amount', valueFormatter:p=>money(p.value,p.data.currency), type:'rightAligned', filter:false, minWidth:120},
+  {field:'due_date', headerName:'Due', minWidth:110},
   {field:'status', headerName:'PayPal status', minWidth:130, cellRenderer:p=>pill(p.value||'')},
-  {field:'pay_url', headerName:'Link', cellRenderer:p=>p.value?`<a href="${p.value}" target="_blank">open</a>`:''},
-], {overlayNoRowsTemplate:'<div class="hint">No invoices issued yet. Click <b>New invoice</b> or ask Kassa in chat.</div>'}));
+  {field:'pay_url', headerName:'Link', minWidth:80, maxWidth:90, filter:false, sortable:false, cellRenderer:p=>p.value?`<a href="${p.value}" target="_blank">open</a>`:''},
+], {overlayNoRowsTemplate:'<div class="hint">No invoices issued yet. Click <b>Load sample invoices</b>, <b>New invoice</b>, or ask Kassa in chat.</div>'}));
 const auditGrid = agGrid.createGrid(document.getElementById('audit'), gridOpts([
-  {field:'ts', headerName:'Time', valueFormatter:p=>fmtTs(p.value), minWidth:150},
-  {field:'actor', headerName:'Actor', maxWidth:90},
-  {field:'tool', headerName:'Tool', minWidth:160},
-  {field:'ok', headerName:'OK', maxWidth:60, cellRenderer:p=>p.value?'✓':'✗'},
+  {field:'ts', headerName:'Time', valueFormatter:p=>fmtTs(p.value), minWidth:170, maxWidth:190},
+  {field:'actor', headerName:'Actor', minWidth:100, maxWidth:120},
+  {field:'tool', headerName:'Tool', minWidth:180, maxWidth:220},
+  {field:'ok', headerName:'OK', width:64, minWidth:64, maxWidth:64, flex:0, filter:false, sortable:false, resizable:false, cellRenderer:p=>p.value?'✓':'<span style="color:var(--bad)">✗</span>'},
   {field:'reason', headerName:'Reason', minWidth:220, flex:2, wrapText:true, autoHeight:true},
   {field:'input', headerName:'Input', minWidth:200, tooltipField:'input'},
   {field:'output', headerName:'Output', minWidth:200, tooltipField:'output'},
@@ -188,10 +192,11 @@ function renderQueue(items) {
   document.getElementById('queue-count').textContent = items.length ? `${items.length} waiting` : '';
   if (!items.length) { q.innerHTML = '<div class="hint">Nothing waiting. Policy auto-approves known suppliers under the limit.</div>'; return; }
   q.innerHTML = items.map(b => `
-    <div class="card">
+    <div class="card${b.risk_level==='high' ? ' scam' : ''}">
       <b>#${b.id} ${b.supplier||'(unknown supplier)'}</b> — ${money(b.amount,b.currency)} ${b.invoice_number?`· ${b.invoice_number}`:''}<br>
       <span class="hint">${b.supplier_email||'no PayPal email'} · due ${b.due_date||'?'}</span>
-      <div class="why">⚠ ${b.reason||''}</div>
+      ${b.risk_level==='high' ? `<div class="scam-box"><b>⚠ Possible scam. Do not pay without checking with the supplier by phone.</b><ul>${(b.risk_signals||[]).map(x => `<li>${esc(x)}</li>`).join('')}</ul></div>` : `<div class="why">⚠ ${esc(b.reason||'')}</div>`}
+      ${b.risk_level==='medium' ? `<div class="hint">Check: ${esc((b.risk_signals||[]).join('; '))}</div>` : ''}
       <div class="row">
         <button class="ok" data-act="approve" data-id="${b.id}">Approve</button>
         <label><input type="checkbox" data-trust="${b.id}"> trust supplier</label>
@@ -257,7 +262,9 @@ document.getElementById('file').onchange = e => act(async () => { const fd = new
 document.getElementById('queue').onclick = e => {
   const btn = e.target.closest('button[data-act]'); if(!btn) return;
   const id = btn.dataset.id;
-  if (btn.dataset.act==='approve') { const trust = document.querySelector(`input[data-trust="${id}"]`).checked; act(() => api(`/bills/${id}/approve`, {method:'POST', body:JSON.stringify({trust_supplier:trust})}), 'Approving…', `Bill #${id} approved. Click “Pay all approved” to pay it.`); }
+  if (btn.dataset.act==='approve') { const trust = document.querySelector(`input[data-trust="${id}"]`).checked;
+    const bill = BILLS.find(b => String(b.id) === String(id));
+    if (bill && bill.risk_level === 'high' && !confirm('Kassa flagged this bill as a possible scam:\n\n- ' + (bill.risk_signals||[]).join('\n- ') + '\n\nApprove it anyway?')) return; act(() => api(`/bills/${id}/approve`, {method:'POST', body:JSON.stringify({trust_supplier:trust})}), 'Approving…', `Bill #${id} approved. Click “Pay all approved” to pay it.`); }
   else { const reason = prompt('Reason for rejecting?', 'not a valid invoice'); if (reason!=null) act(() => api(`/bills/${id}/reject`, {method:'POST', body:JSON.stringify({reason})}), 'Rejecting…', `Bill #${id} rejected.`); }
 };
 document.getElementById('btn-sample-invoices').onclick = () => act(loadSampleInvoices, 'Loading sample invoices…', 'Three invoices sent via PayPal. Click “open” to see the PayPal payment page.');

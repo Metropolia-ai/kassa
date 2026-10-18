@@ -125,3 +125,24 @@ def test_demo_story(kassa):
 def test_quantity_format():
     from app.paypal_client import _qty
     assert _qty(3.0) == "3" and _qty(1) == "1" and _qty(1.5) == "1.5"
+
+
+def test_scam_flagged_high(kassa):
+    b = kassa.ingest("05", read("05-suspicious-urgent.txt"))
+    assert b["status"] == "needs_approval" and b["risk_level"] == "high"
+    assert b["reason"].startswith("POSSIBLE SCAM") and any("urgent" in x for x in b["risk_signals"])
+
+
+def test_changed_payment_details_of_trusted_supplier(kassa):
+    kassa.store.upsert_supplier("billing@pixelforge.example.com", "Pixelforge Oy", trusted=True)
+    text = read("01-pixelforge-render.txt").replace("PF-2026-0412", "PF-2026-0499").replace(
+        "sb-zkzff53386438@personal.example.com", "pixelforge-payments@mail.example.org")
+    b = kassa.ingest("x", text)
+    assert b["status"] == "needs_approval" and b["risk_level"] == "high"
+    assert any(x.startswith("payment details changed") for x in b["risk_signals"])
+
+
+def test_lookalike_domain():
+    from app.extract import risk_rules
+    sig = risk_rules("Invoice 123", {"invoice_number": "123", "supplier_email": "ceo@frappua-payments.example"}, "Frappua", ("frappua.win",))
+    assert any("imitates" in x for x in sig)

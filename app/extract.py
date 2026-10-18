@@ -22,7 +22,11 @@ FIELDS = {
         "description": {"type": "string"}, "quantity": {"type": "number"}, "unit_price": {"type": "number"},
         "total": {"type": "number"}}, "required": ["description", "total"]}},
     "confidence": {"type": "number", "description": "0..1 how sure you are the key fields (email, amount, number) are right"},
-    "notes": {"type": "string", "description": "Anything odd: missing fields, unusual terms, signs of fraud"},
+    "notes": {"type": "string", "description": "Anything odd: missing fields, unusual terms"},
+    "risk_level": {"type": "string", "enum": ["low", "medium", "high"],
+                   "description": "Fraud risk: high for likely invoice scam / business email compromise"},
+    "risk_signals": {"type": "array", "items": {"type": "string"},
+                     "description": "Short concrete fraud signals found in THIS text, e.g. 'urgent same-day payment', 'asks to keep it confidential', 'no invoice attached', 'new payment account', 'sender domain imitates our company'"},
 }
 
 TOOL = {
@@ -30,12 +34,16 @@ TOOL = {
     "description": "Record the structured fields of a supplier invoice.",
     "input_schema": {"type": "object", "properties": FIELDS,
                      "required": ["supplier", "supplier_email", "invoice_number", "amount", "currency",
-                                  "line_items", "confidence", "notes"]},
+                                  "line_items", "confidence", "notes", "risk_level", "risk_signals"]},
 }
 
 SYSTEM = ("You are the accounts-payable clerk of a small company. Read the supplier invoice text "
           "(an email, PDF text or OCR transcript) and record its fields exactly. Never invent values: use null "
-          "when a field is absent. Amount is the final total payable. Dates in ISO format. Flag anything odd in notes.")
+          "when a field is absent. Amount is the final total payable. Dates in ISO format. Flag anything odd in notes. "
+          "Also assess fraud risk the way an experienced AP clerk would: invoice scams and business email compromise "
+          "show urgency or pressure, secrecy, requests to pay a new or changed account, missing invoice or paperwork, "
+          "sender domains that imitate the buyer or a known supplier, payment to personal accounts or gift cards. "
+          "List only signals actually present in the text.")
 
 
 def extract(text: str) -> dict[str, Any]:
@@ -116,6 +124,51 @@ def extract_rules(text: str) -> dict[str, Any]:
         "notes": ("rule-based extractor; missing: " + ", ".join(missing)) if missing else "rule-based extractor",
         "extractor": "rules",
     })
+
+
+# --- deterministic fraud signals (work with or without an LLM) ---------------
+URGENT_RE = re.compile(r"(?i)\b(urgent|asap|immediately|today|right away|within the hour|kiireellinen|heti|tänään)\b")
+SECRET_RE = re.compile(r"(?i)\b(confidential|keep (this|it) (between us|quiet)|don.t tell|do not discuss|luottamuksellinen)\b")
+LATER_RE = re.compile(r"(?i)(paperwork later|invoice later|send (the )?(invoice|paperwork|documents) later|no invoice attached)")
+NEWACC_RE = re.compile(r"(?i)(new (paypal |bank )?account|changed (our )?(bank|payment) details|updated (bank|payment) details|uusi tili)")
+WIRE_RE = re.compile(r"(?i)\b(wire transfer|wire needed|gift cards?|crypto|bitcoin)\b")
+
+
+def risk_rules(text: str, data: dict[str, Any], merchant_name: str = "", own_domains: tuple[str, ...] = ()) -> list[str]:
+    sig: list[str] = []
+    if URGENT_RE.search(text):
+        sig.append("pressure to pay urgently")
+    if SECRET_RE.search(text):
+        sig.append("asks to keep the payment confidential")
+    if LATER_RE.search(text):
+        sig.append("no invoice, paperwork promised later")
+    if NEWACC_RE.search(text):
+        sig.append("asks to pay a new or changed account")
+    if WIRE_RE.search(text):
+        sig.append("asks for a wire, gift cards or crypto")
+    if not data.get("invoice_number"):
+        sig.append("no invoice number")
+    email = (data.get("supplier_email") or "").lower()
+    dom = email.split("@", 1)[1] if "@" in email else ""
+    m = (merchant_name or "").lower().replace(" ", "")
+    if dom and m and m in dom.replace("-", "").replace(".", "") and dom not in own_domains:
+        sig.append(f"sender domain {dom} imitates our company name")
+    return sig
+
+
+def combine_risk(llm_level: str | None, llm_signals: list[str] | None, rule_signals: list[str]) -> tuple[str, list[str]]:
+    signals: list[str] = []
+    for x in list(rule_signals) + list(llm_signals or []):
+        x = x.strip().rstrip(".")
+        if x and x.lower() not in {y.lower() for y in signals}:
+            signals.append(x)
+    strong = [x for x in rule_signals if x != "no invoice number"]
+    level = "low"
+    if len(strong) >= 2 or (llm_level == "high" and len(llm_signals or []) >= 2):
+        level = "high"
+    elif strong or llm_level == "medium" or len(signals) >= 2:
+        level = "medium"
+    return level, signals[:8]
 
 
 def _num(s: str | None) -> float | None:

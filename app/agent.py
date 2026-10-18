@@ -38,10 +38,19 @@ class Kassa:
             return self.store.get_bill(bill_id)
         fields = {k: data.get(k) for k in ("supplier", "supplier_email", "invoice_number", "invoice_date",
                                             "due_date", "amount", "currency", "line_items", "confidence")}
+        own = tuple(d.strip().lower() for d in os.environ.get("OWN_DOMAINS", "").split(",") if d.strip())
+        rule_sig = extract_mod.risk_rules(text, data, self.merchant_name, own)
+        known = self.store.find_supplier_by_name(data.get("supplier"))
+        if known and data.get("supplier_email") and known["email"] != (data.get("supplier_email") or "").lower():
+            rule_sig.append(f"payment details changed: {known['name']} is paid to {known['email']}, this bill asks for {data.get('supplier_email')}")
+        level, signals = extract_mod.combine_risk(data.get("risk_level"), data.get("risk_signals"), rule_sig)
+        if any(x.startswith("payment details changed") for x in rule_sig):
+            level = "high"
+        fields["risk_level"], fields["risk_signals"] = level, signals
         self.store.update_bill(bill_id, status="extracted", **fields)
         self.store.audit(actor, "extract_bill", {"bill_id": bill_id, "source": source},
                          {**fields, "notes": data.get("notes"), "extractor": data.get("extractor")},
-                         data.get("notes"), True)
+                         (f"risk {level}: " + "; ".join(signals[:3]) + ". " if level != "low" else "") + (data.get("notes") or ""), True)
         return self.evaluate(bill_id, actor=actor)
 
     def evaluate(self, bill_id: int, actor: str = "agent") -> dict:
@@ -281,4 +290,4 @@ class Kassa:
 
 def _slim(b: dict) -> dict:
     return {k: b.get(k) for k in ("id", "supplier", "supplier_email", "invoice_number", "due_date", "amount",
-                                  "currency", "status", "reason", "payout_batch_id", "payout_status")}
+                                  "currency", "status", "reason", "risk_level", "risk_signals", "payout_batch_id", "payout_status")}

@@ -22,6 +22,7 @@ CREATE TABLE IF NOT EXISTS bills (
   status TEXT NOT NULL,            -- extracted | needs_approval | approved | paying | paid | failed | rejected
   reason TEXT,                     -- policy / agent explanation
   payout_batch_id TEXT, payout_item_id TEXT, payout_status TEXT,
+  risk_level TEXT, risk_signals TEXT,  -- JSON list
   updated_at TEXT NOT NULL
 );
 CREATE TABLE IF NOT EXISTS suppliers (
@@ -71,11 +72,17 @@ class _DB:
                 for stmt in schema.split(";"):
                     if stmt.strip():
                         cur.execute(stmt)
+                for col in ("risk_level", "risk_signals"):
+                    cur.execute(f"ALTER TABLE bills ADD COLUMN IF NOT EXISTS {col} TEXT")
         else:
             self.pg = False
             self.conn = sqlite3.connect(path, check_same_thread=False, isolation_level=None)
             self.conn.row_factory = sqlite3.Row
             self.conn.executescript(SCHEMA)
+            have = {r[1] for r in self.conn.execute("PRAGMA table_info(bills)").fetchall()}
+            for col in ("risk_level", "risk_signals"):
+                if col not in have:
+                    self.conn.execute(f"ALTER TABLE bills ADD COLUMN {col} TEXT")
 
     def execute(self, sql: str, params: tuple = ()):
         if self.pg:
@@ -106,8 +113,9 @@ class Store:
                 (now(), source, raw_text, "received", now()))
 
     def update_bill(self, bill_id: int, **fields: Any) -> None:
-        if "line_items" in fields and not isinstance(fields["line_items"], str):
-            fields["line_items"] = json.dumps(fields["line_items"], ensure_ascii=False)
+        for k in ("line_items", "risk_signals"):
+            if k in fields and fields[k] is not None and not isinstance(fields[k], str):
+                fields[k] = json.dumps(fields[k], ensure_ascii=False)
         fields["updated_at"] = now()
         cols = ", ".join(f"{k}=?" for k in fields)
         with self._lock:
@@ -138,6 +146,12 @@ class Store:
         if not email:
             return None
         row = self.db.execute("SELECT * FROM suppliers WHERE email=?", (email.lower(),)).fetchone()
+        return dict(row) if row else None
+
+    def find_supplier_by_name(self, name: str | None) -> dict | None:
+        if not name:
+            return None
+        row = self.db.execute("SELECT * FROM suppliers WHERE lower(name)=lower(?) AND trusted=1 LIMIT 1", (name.strip(),)).fetchone()
         return dict(row) if row else None
 
     def upsert_supplier(self, email: str, name: str | None, trusted: bool | None = None) -> None:
@@ -197,11 +211,12 @@ class Store:
 
 def _bill(row) -> dict:
     d = dict(row)
-    if d.get("line_items"):
-        try:
-            d["line_items"] = json.loads(d["line_items"])
-        except ValueError:
-            pass
+    for k in ("line_items", "risk_signals"):
+        if d.get(k):
+            try:
+                d[k] = json.loads(d[k])
+            except (ValueError, TypeError):
+                pass
     return d
 
 

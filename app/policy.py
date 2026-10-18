@@ -25,6 +25,9 @@ def evaluate(bill: dict, *, auto_pay_limit: float, supplier: dict | None, duplic
     reasons: list[str] = []
     if duplicate:
         return Decision("rejected", [f"duplicate of bill #{duplicate['id']} (same supplier and invoice number {bill.get('invoice_number')})"])
+    if bill.get("risk_level") == "high":
+        sig = bill.get("risk_signals") or []
+        return Decision("needs_approval", ["POSSIBLE SCAM: " + "; ".join(sig[:5])])
     amount = bill.get("amount")
     if amount is None or amount <= 0:
         return Decision("needs_approval", ["amount missing or not positive"])
@@ -40,6 +43,8 @@ def evaluate(bill: dict, *, auto_pay_limit: float, supplier: dict | None, duplic
     if conf is not None and conf < min_confidence:
         reasons.append(f"extraction confidence {conf:.2f} below {min_confidence:.2f}")
     notes: list[str] = []
+    if bill.get("risk_level") == "medium":
+        notes.append("check: " + "; ".join((bill.get("risk_signals") or [])[:3]))
     due = bill.get("due_date")
     if due:
         try:
