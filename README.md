@@ -28,10 +28,10 @@ Optional LLM: set `OPENROUTER_API_KEY` + `LLM_MODEL` (any OpenAI-compatible endp
 The hosted demo is gated: the page asks for an access key once and stores it in the browser; every API call sends it as `X-Kassa-Key`. Without it the API returns 401, so nobody can spend the LLM budget or use the PayPal sandbox. Judges get the key in the Devpost testing instructions.
 
 ## Demo walkthrough
-1. **Load sample inbox.** Five bills: two go to the queue (first time we see the supplier), one is rejected as a duplicate, one is overdue, one is a fake "urgent wire" with no invoice.
-2. **Approve** Pixelforge with "trust supplier". Click **Pay all approved**: a Payouts batch is created in the sandbox; **Refresh PayPal status** shows `SUCCESS`.
-3. Re-send a Pixelforge bill with a new number under the limit: it is paid without asking.
-4. Chat: `invoice Acme acme@example.com 1500 EUR for the pilot` → a PayPal invoice is created and sent; open the link.
+1. **Load sample inbox.** The company already works with two trusted suppliers (seeded from `samples/suppliers.json`). Of five bills, two are auto-approved (trusted supplier, under the limit; one is overdue and flagged "pay now"), two go to the approval queue (a new supplier above the limit, and a fake "urgent wire" with no invoice), one is rejected as a duplicate.
+2. Click **Pay all approved**: Payouts batches are created in the sandbox; **Refresh PayPal status** shows `SUCCESS` (sandbox personal account) or `UNCLAIMED` (an address with no sandbox account; normal in sandbox).
+3. In the queue, approve Nordic Voice with "trust supplier" and pay it; reject the fake wire.
+4. **Load sample invoices** sends three customer invoices through PayPal Invoicing, or use **New invoice** or chat: `invoice Acme acme@example.com 1500 EUR for the pilot`. Open the link to see the PayPal payment page.
 5. Audit log shows each step and the one refusal (agent tried to pay an unapproved bill).
 
 ## Stack

@@ -1,0 +1,9 @@
+[
+  {"customer_name": "Acme Logistics Oy", "due_in_days": 14, "memo": "SafeSkillVR pilot, warehouse safety module, 4 weeks",
+   "items": [{"name": "SafeSkillVR pilot", "description": "4-week pilot, up to 20 trainees", "quantity": 1, "unit_amount": 15000}]},
+  {"customer_name": "Metropolia AMK", "due_in_days": 30, "memo": "VR safety workshop, 2 sessions",
+   "items": [{"name": "Workshop session", "description": "On-site, 3 h", "quantity": 2, "unit_amount": 600},
+             {"name": "Headset rental", "description": "Meta Quest 3, per day", "quantity": 4, "unit_amount": 45}]},
+  {"customer_name": "Nordic Freight Ab", "due_in_days": 7, "memo": "AI Vision Monitor, October",
+   "items": [{"name": "AI Vision Monitor licence", "description": "Per camera, monthly", "quantity": 3, "unit_amount": 49}]}
+]

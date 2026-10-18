@@ -176,8 +176,36 @@ def list_samples():
     return [{"name": Path(x).name, "text": Path(x).read_text(encoding="utf-8")} for x in sorted(glob.glob(str(ROOT / "samples" / "*.txt")))]
 
 
+@app.post("/api/samples/suppliers")
+def seed_suppliers():
+    """Demo: the company already works with some suppliers. Seeds them as trusted so auto-pay is visible."""
+    import json as _json
+    seeded = []
+    for sup in _json.loads((ROOT / "samples" / "suppliers.json").read_text(encoding="utf-8")):
+        kassa.store.upsert_supplier(sup["email"], sup["name"], trusted=sup.get("trusted", False))
+        seeded.append(sup["name"])
+    kassa.store.audit("human", "seed_suppliers", {"suppliers": seeded}, {"trusted": seeded}, "demo: known suppliers", True)
+    return {"seeded": seeded}
+
+
+@app.get("/api/samples/invoices")
+def sample_invoices():
+    import json as _json
+    email = os.environ.get("DEMO_CUSTOMER_EMAIL", "")
+    out = _json.loads((ROOT / "samples" / "customer-invoices.json").read_text(encoding="utf-8"))
+    for x in out:
+        x["customer_email"] = email
+    return out
+
+
+@app.get("/api/suppliers")
+def suppliers_list():
+    return kassa.store.list_suppliers()
+
+
 @app.post("/api/bills/samples")
 def load_samples():
+    seed_suppliers()
     out = []
     for path in sorted(glob.glob(str(ROOT / "samples" / "*.txt"))):
         out.append(kassa.ingest(Path(path).name, Path(path).read_text(encoding="utf-8")))
@@ -234,11 +262,6 @@ def refresh():
 @app.get("/api/audit")
 def audit(limit: int = 200):
     return kassa.store.list_audit(limit)
-
-
-@app.get("/api/suppliers")
-def suppliers():
-    return kassa.store.list_suppliers()
 
 
 @app.get("/api/chat")

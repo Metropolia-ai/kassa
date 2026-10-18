@@ -106,3 +106,22 @@ def test_rules_chat(kassa):
     kassa.ingest("01", read("01-pixelforge-render.txt"))
     assert "Pixelforge" in kassa.chat("list bills")
     assert "Paid 0" in kassa.chat("pay approved bills")
+
+
+def test_trusted_supplier_autopays_even_if_overdue(kassa):
+    kassa.store.upsert_supplier("ar@cloudbox.example.net", "Cloudbox Hosting", trusted=True)
+    b = kassa.ingest("04", read("04-cloudbox-hosting.txt"))
+    assert b["status"] == "approved" and "overdue since" in b["reason"]
+
+
+def test_demo_story(kassa):
+    import json
+    for sup in json.loads((SAMPLES / "suppliers.json").read_text()):
+        kassa.store.upsert_supplier(sup["email"], sup["name"], trusted=sup["trusted"])
+    st = [kassa.ingest(f.name, f.read_text())["status"] for f in sorted(SAMPLES.glob("*.txt"))]
+    assert st == ["approved", "needs_approval", "rejected", "approved", "needs_approval"]
+
+
+def test_quantity_format():
+    from app.paypal_client import _qty
+    assert _qty(3.0) == "3" and _qty(1) == "1" and _qty(1.5) == "1.5"

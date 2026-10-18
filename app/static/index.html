@@ -94,7 +94,7 @@
     </section>
     <section>
       <h2>Customer invoices (PayPal Invoicing)
-        <div class="toolbar"><button id="btn-new-invoice" class="primary">New invoice</button></div>
+        <div class="toolbar"><button id="btn-sample-invoices" class="primary">Load sample invoices</button><button id="btn-new-invoice">New invoice</button></div>
       </h2>
       <div id="invoices" class="grid"></div>
       <details id="invoice-form" style="margin-top:8px"><summary class="hint">New invoice: fill the form, or just ask in chat: “invoice Fläkt pilot 15000 EUR to buyer@example.com, due 14 days”</summary>
@@ -219,6 +219,8 @@ function busy(msg){ const b = document.getElementById('busy'); if (msg) { b.text
 function toast(text, kind='ok'){ const t = document.createElement('div'); t.className = 'toast ' + kind; t.textContent = text; document.body.appendChild(t); setTimeout(() => t.classList.add('show'), 10); setTimeout(() => { t.classList.remove('show'); setTimeout(() => t.remove(), 300); }, kind==='bad' ? 7000 : 3500); }
 async function act(fn, msg, done){ busy(msg || 'Working…'); try { await fn(); if (done) toast(done); } catch(err) { toast(err.message, 'bad'); } finally { busy(null); } await load(); }
 async function loadSamples(){
+  busy('Adding the suppliers the company already works with…');
+  await api('/samples/suppliers', {method:'POST'});
   const samples = await api('/samples');
   for (let i = 0; i < samples.length; i++) {
     busy(`Agent is reading invoice ${i+1} of ${samples.length}: ${samples[i].name}`);
@@ -226,8 +228,17 @@ async function loadSamples(){
     await load();
   }
 }
+async function loadSampleInvoices(){
+  const inv = await api('/samples/invoices');
+  if (!inv.length || !inv[0].customer_email) throw new Error('DEMO_CUSTOMER_EMAIL is not set on the server');
+  for (let i = 0; i < inv.length; i++) {
+    busy(`Creating and sending invoice ${i+1} of ${inv.length} via PayPal: ${inv[i].customer_name}`);
+    await api('/invoices', {method:'POST', body:JSON.stringify(inv[i])});
+    await load();
+  }
+}
 let CFG = {};
-document.getElementById('btn-samples').onclick = () => act(loadSamples, 'Loading sample inbox…', 'Sample inbox processed. Check the approval queue on the right.');
+document.getElementById('btn-samples').onclick = () => act(loadSamples, 'Loading sample inbox…', 'Sample inbox processed: 2 bills auto-approved for trusted suppliers, 2 wait for you in the queue, 1 duplicate rejected. Click “Pay all approved”.');
 document.getElementById('btn-pay-approved').onclick = () => act(async () => { const r = await api('/bills/pay-approved', {method:'POST'}); const ok = r.filter(x => !x.error).length; if (!r.length) throw new Error('Nothing to pay: no bills in approved state. Approve something in the queue first.'); toast(`Paid ${ok} of ${r.length} approved bill(s) via PayPal Payouts`); }, 'Paying approved bills via PayPal Payouts…');
 document.getElementById('btn-refresh').onclick = () => act(() => api('/refresh', {method:'POST'}), 'Pulling statuses from PayPal…');
 document.getElementById('btn-reset').onclick = () => confirm('Clear all demo data?') && act(() => api('/reset', {method:'POST'}), 'Resetting…', 'Demo data cleared.');
@@ -240,6 +251,7 @@ document.getElementById('queue').onclick = e => {
   if (btn.dataset.act==='approve') { const trust = document.querySelector(`input[data-trust="${id}"]`).checked; act(() => api(`/bills/${id}/approve`, {method:'POST', body:JSON.stringify({trust_supplier:trust})}), 'Approving…', `Bill #${id} approved. Click “Pay all approved” to pay it.`); }
   else { const reason = prompt('Reason for rejecting?', 'not a valid invoice'); if (reason!=null) act(() => api(`/bills/${id}/reject`, {method:'POST', body:JSON.stringify({reason})}), 'Rejecting…', `Bill #${id} rejected.`); }
 };
+document.getElementById('btn-sample-invoices').onclick = () => act(loadSampleInvoices, 'Loading sample invoices…', 'Three invoices sent via PayPal. Click “open” to see the PayPal payment page.');
 document.getElementById('btn-new-invoice').onclick = () => { const d = document.getElementById('invoice-form'); d.open = true; d.querySelector('input').focus(); };
 document.getElementById('form-invoice').onsubmit = e => {
   e.preventDefault(); const f = Object.fromEntries(new FormData(e.target).entries());

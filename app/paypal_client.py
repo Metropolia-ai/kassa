@@ -116,7 +116,7 @@ class PayPalClient:
             "items": [{
                 "name": it["name"],
                 "description": it.get("description", ""),
-                "quantity": str(it.get("quantity", "1")),
+                "quantity": _qty(it.get("quantity", 1)),
                 "unit_amount": {"currency_code": currency, "value": str(it["unit_amount"])},
             } for it in items],
         }
@@ -147,6 +147,11 @@ class PayPalClient:
         return self._request("GET", "/v1/reporting/transactions",
                              params={"start_date": start_iso, "end_date": end_iso, "fields": "all",
                                      "page_size": page_size})
+
+
+def _qty(q: Any) -> str:
+    q = float(q)
+    return str(int(q)) if q.is_integer() else f"{q:g}"
 
 
 def _json(r: httpx.Response) -> Any:

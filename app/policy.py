@@ -9,10 +9,14 @@ from datetime import date
 class Decision:
     status: str          # approved | needs_approval | rejected
     reasons: list[str]
+    notes: list[str] | None = None
 
     @property
     def reason(self) -> str:
-        return "; ".join(self.reasons) if self.reasons else "within policy: known supplier, amount under limit, no duplicates"
+        if self.reasons:
+            return "; ".join(self.reasons)
+        base = "within policy: trusted supplier, amount under limit, no duplicates"
+        return base + ("; " + "; ".join(self.notes) if self.notes else "")
 
 
 def evaluate(bill: dict, *, auto_pay_limit: float, supplier: dict | None, duplicate: dict | None,
@@ -35,13 +39,16 @@ def evaluate(bill: dict, *, auto_pay_limit: float, supplier: dict | None, duplic
     conf = bill.get("confidence")
     if conf is not None and conf < min_confidence:
         reasons.append(f"extraction confidence {conf:.2f} below {min_confidence:.2f}")
+    notes: list[str] = []
     due = bill.get("due_date")
     if due:
         try:
             if date.fromisoformat(due) < today:
-                reasons.append(f"due date {due} already passed")
+                notes.append(f"overdue since {due}, pay now")
         except ValueError:
             reasons.append(f"unreadable due date {due!r}")
     if not bill.get("invoice_number"):
         reasons.append("no invoice number")
-    return Decision("needs_approval" if reasons else "approved", reasons)
+    if reasons:
+        return Decision("needs_approval", reasons + notes)
+    return Decision("approved", [], notes)
