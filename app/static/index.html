@@ -22,6 +22,7 @@
     --red:#B42318;      /* red ink */
     --held:#855700;     /* amber for held */
     --scam-bg:#F6E1DD;
+    --check-bg:#F6ECD6;
     --on-accent:#FFFFFF;
     --shade:rgba(27,42,63,.45);
     color-scheme:light;
@@ -40,6 +41,7 @@
     --red:#F07D72;
     --held:#E3B65E;
     --scam-bg:#3A2321;
+    --check-bg:#332A1B;
     --on-accent:#121315;
     --shade:rgba(0,0,0,.6);
     color-scheme:dark;
@@ -99,6 +101,13 @@
   .scam { border-left:3px solid var(--red); padding:8px 12px; background:var(--scam-bg); max-width:70ch; }
   .scam strong { color:var(--red); display:block; margin-bottom:2px; }
   .scam ul { margin:4px 0 0; padding-left:18px; font-size:14px; }
+  /* a bill Kassa thinks is a scam has to stand out wherever it appears */
+  .req.danger { border:2px solid var(--red); border-radius:6px; background:var(--scam-bg); padding:16px; margin:8px 0; }
+  .req.danger + .req { border-top:0; }
+  .req.danger .scam { background:var(--paper); }
+  .btn.red.solid { background:var(--red); color:var(--on-accent); }
+  .btn.risky { border:2px solid var(--red); color:var(--red); padding:7px 13px;
+    background:repeating-linear-gradient(-45deg, color-mix(in srgb, var(--red) 16%, transparent) 0 6px, transparent 6px 12px); }
 
   /* ---------- tabs ---------- */
   .tabs { display:flex; gap:28px; border-bottom:1px solid var(--rule); margin-bottom:14px; align-items:flex-end; }
@@ -117,6 +126,11 @@
   /* stamps are rotated, so their corners stick out of the text box: let them */
   .ag-cell[col-id="status"] { overflow:visible !important; }
   .ag-cell[col-id="status"] .ag-cell-wrapper, .ag-cell[col-id="status"] .ag-cell-value { overflow:visible !important; line-height:normal; }
+  /* flagged rows in the bills table */
+  .ag-row.row-scam { background-color:var(--scam-bg) !important; box-shadow:inset 0 0 0 2px var(--red), inset 6px 0 0 var(--red); }
+  .ag-row.row-scam-done { box-shadow:inset 6px 0 0 var(--red); }
+  .ag-row.row-check { background-color:var(--check-bg) !important; box-shadow:inset 0 0 0 1px var(--held), inset 6px 0 0 var(--held); }
+  .ag-row.row-scam .ag-cell:first-child, .ag-row.row-scam-done .ag-cell:first-child, .ag-row.row-check .ag-cell:first-child { padding-left:20px; }
   .below { margin-top:10px; color:var(--pencil); font-size:13px; }
   details summary { cursor:pointer; }
   textarea { width:100%; height:110px; border:1px solid var(--rule); background:var(--paper); font-family:var(--mono); font-size:13px; border-radius:6px; padding:10px; margin:8px 0; resize:vertical; }
@@ -223,7 +237,7 @@
   <p class="lead">Kassa is an AI bookkeeper for a small company. It reads supplier invoices, pays the ones that pass the payment policy through PayPal Payouts, holds the rest for a person, and bills customers through PayPal Invoicing. Everything runs in the PayPal sandbox: no real money moves.</p>
   <ol class="steps">
     <li><b>Load sample inbox.</b> The model reads five supplier invoices. Two are approved on their own because the suppliers are trusted and the amounts are under the limit. Two wait under “Needs you”. One is caught as a duplicate.</li>
-    <li><b>Look at the bill from “Finance Dept”.</b> It is a typical invoice scam: urgency, secrecy, a new account, a sender domain that imitates the company. Kassa lists the signals and holds it even though nothing technical is wrong. Reject it, or approve it to see what happens.</li>
+    <li><b>Look at the €4,980 bill from “Finance Dept”.</b> The table and the queue mark it in red. It is a typical invoice scam: urgency, secrecy, a new account, a sender domain that imitates the company. Kassa lists the signals and holds it even though nothing technical is wrong. Reject it, or approve it to see what happens.</li>
     <li><b>Approve Nordic Voice Studio</b>, tick “Trust this supplier”, then press <b>Pay approved bills</b>. All approved bills go to PayPal Payouts. Their stamp turns from Sent to Paid when PayPal confirms; “Check PayPal status” asks PayPal right away.</li>
     <li><b>Open “Invoices sent” and press Send sample invoices.</b> Three customer invoices go out through PayPal. “Open” shows the page the customer gets.</li>
     <li><b>Ask Kassa</b> on the right, for example “What is waiting for me and why?” or “Invoice Acme Oy 1500 EUR for the pilot, due in 14 days”. The agent works through tools. It can pay what is approved, but it cannot approve a payment itself.</li>
@@ -397,7 +411,11 @@ const billsGrid = agGrid.createGrid($('grid-bills'), base([
   {field:'amount', headerName:'Amount', type:'rightAligned', minWidth:110, maxWidth:130, valueFormatter:p => money(p.value, p.data.currency), cellStyle:{fontWeight:600}},
   {field:'status', headerName:'Status', minWidth:230, maxWidth:250, cellRenderer:p => billStatus(p.data)},
   {field:'reason', headerName:'Why', minWidth:240, flex:3, wrapText:true, autoHeight:true},
-], {overlayNoRowsTemplate:'<span style="color:var(--pencil)">No bills yet. Load the sample inbox and Kassa will read five supplier invoices.</span>',
+], {rowClassRules:{
+      'row-scam': p => p.data?.risk_level === 'high' && p.data.status !== 'rejected',
+      'row-scam-done': p => p.data?.risk_level === 'high' && p.data.status === 'rejected',
+      'row-check': p => p.data?.risk_level === 'medium' && p.data.status !== 'rejected'},
+    overlayNoRowsTemplate:'<span style="color:var(--pencil)">No bills yet. Load the sample inbox and Kassa will read five supplier invoices.</span>',
     onRowClicked:e => showDetail(e.data.supplier || 'Bill', billRows(e.data), e.data.raw_text)}));
 
 const invGrid = agGrid.createGrid($('grid-invoices'), base([
@@ -466,19 +484,22 @@ function renderQueue(items) {
   $('needs-n').textContent = items.length ? items.length : '';
   const q = $('queue');
   if (!items.length) { q.innerHTML = '<p class="none">Nothing is waiting. Kassa approves trusted suppliers under the limit on its own and brings everything else here.</p>'; return; }
-  q.innerHTML = items.map(b => `
-    <div class="req">
+  q.innerHTML = items.map(b => { const scam = b.risk_level === 'high'; return `
+    <div class="req${scam ? ' danger' : ''}">
       <div class="who-line">${esc(b.supplier || 'Unknown sender')}<span class="amount">${money(b.amount, b.currency)}</span></div>
       <div class="sub">${esc(b.supplier_email || 'no payment address')}${b.invoice_number ? ', invoice ' + esc(b.invoice_number) : ', no invoice number'}${b.due_date ? ', due ' + esc(b.due_date) : ''}</div>
-      ${b.risk_level === 'high'
+      ${scam
         ? `<div class="scam"><strong>This looks like a scam. Call the supplier on a number you already have before paying.</strong><ul>${(b.risk_signals || []).map(x => `<li>${esc(x)}</li>`).join('')}</ul></div>`
         : `<div class="why">${esc(b.reason || '')}</div>`}
       <div class="ctl">
         <label><input type="checkbox" data-trust="${b.id}"> Trust this supplier</label>
-        <button class="btn green solid" data-act="approve" data-id="${b.id}">Approve</button>
-        <button class="btn red" data-act="reject" data-id="${b.id}">Reject</button>
+        ${scam
+          ? `<button class="btn risky" data-act="approve" data-id="${b.id}">⚠ Approve anyway</button>
+        <button class="btn red solid" data-act="reject" data-id="${b.id}">Reject</button>`
+          : `<button class="btn green solid" data-act="approve" data-id="${b.id}">Approve</button>
+        <button class="btn red" data-act="reject" data-id="${b.id}">Reject</button>`}
       </div>
-    </div>`).join('');
+    </div>`; }).join('');
 }
 $('queue').onclick = e => {
   const btn = e.target.closest('button[data-act]'); if (!btn) return;
@@ -522,7 +543,12 @@ async function loadSamples() {
   }
 }
 $('btn-samples').onclick = () => act(loadSamples, 'Loading the sample inbox…', 'Done. Two bills are approved and ready to pay, two need your decision, one was a duplicate.');
-$('btn-pay').onclick = () => act(async () => {
+$('btn-pay').onclick = () => {
+  const flagged = BILLS.filter(b => b.status === 'approved' && b.risk_level === 'high');
+  if (flagged.length && !confirm('These approved bills were flagged as a scam:\n\n' + flagged.map(b => `- ${b.supplier || 'Unknown sender'}, ${money(b.amount, b.currency)}`).join('\n') + '\n\nSend the money anyway?')) return;
+  payApproved();
+};
+const payApproved = () => act(async () => {
   const r = await api('/bills/pay-approved', {method:'POST'});
   if (!r.length) throw new Error('No bills are approved yet. Approve one under “Needs you” first.');
   const failed = r.filter(x => x.error);

@@ -7,6 +7,7 @@ from __future__ import annotations
 
 import json
 import os
+import re
 from datetime import date, datetime, timedelta, timezone
 from typing import Any, Callable
 
@@ -55,6 +56,9 @@ class Kassa:
             return self.store.get_bill(bill_id)
         fields = {k: data.get(k) for k in ("supplier", "supplier_email", "invoice_number", "invoice_date",
                                             "due_date", "amount", "currency", "line_items", "confidence")}
+        if not fields.get("supplier"):  # fall back to the name the sender gave in the e-mail header
+            m = re.search(r'^From:\s*"?([^"<\n]+?)"?\s*<', text, re.M)
+            fields["supplier"] = m.group(1).strip() if m else None
         own = tuple(d.strip().lower() for d in os.environ.get("OWN_DOMAINS", "").split(",") if d.strip())
         rule_sig = extract_mod.risk_rules(text, data, self.merchant_name, own)
         known = self.store.find_supplier_by_name(data.get("supplier"))
@@ -63,6 +67,9 @@ class Kassa:
         level, signals = extract_mod.combine_risk(data.get("risk_level"), data.get("risk_signals"), rule_sig)
         if any(x.startswith("payment details changed") for x in rule_sig):
             level = "high"
+        elif level == "medium" and not rule_sig and known and known["email"] == (data.get("supplier_email") or "").lower():
+            # a trusted supplier asking to be paid where we always pay them: the model's doubts alone are noise
+            level, signals = "low", []
         fields["risk_level"], fields["risk_signals"] = level, signals
         self.store.update_bill(bill_id, status="extracted", **fields)
         self.store.audit(actor, "extract_bill", {"bill_id": bill_id, "source": source},
@@ -92,7 +99,7 @@ class Kassa:
             raise PermissionError("only a human can approve a bill")
         if bill["status"] not in ("needs_approval", "extracted", "failed"):
             raise ValueError(f"bill #{bill_id} is {bill['status']}, cannot approve")
-        reason = note or "approved by human"
+        reason = note or ("approved by a person despite the scam warning" if bill.get("risk_level") == "high" else "approved by a person")
         self.store.update_bill(bill_id, status="approved", reason=reason)
         if trust_supplier and bill.get("supplier_email"):
             self.store.upsert_supplier(bill["supplier_email"], bill.get("supplier"), trusted=True)
