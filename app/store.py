@@ -74,9 +74,10 @@ class _DB:
         self.url = os.environ.get("DATABASE_URL")
         if schema and not re.fullmatch(r"[a-z_][a-z0-9_]*", schema):
             raise ValueError(f"bad schema name {schema!r}")
-        if schema and os.environ.get("DATABASE_URL_UNPOOLED"):
-            # A schema is selected with SET search_path, which only sticks on a real session. Pooled URLs
-            # (Neon's PgBouncer in transaction mode) may hand each statement to a different session.
+        if os.environ.get("DATABASE_URL_UNPOOLED"):
+            # Schemas are selected with SET search_path, which only sticks on a real session. Pooled URLs
+            # (Neon's PgBouncer in transaction mode) hand statements to shared sessions, and a session that
+            # once ran SET keeps it for everyone. So when a direct URL is available, every store uses it.
             self.url = os.environ["DATABASE_URL_UNPOOLED"]
         if self.url:
             import psycopg
@@ -87,10 +88,10 @@ class _DB:
             with self.conn.cursor() as cur:
                 if schema:
                     cur.execute(f"CREATE SCHEMA IF NOT EXISTS {schema}")
-                    cur.execute(f"SET search_path TO {schema}")
-                    cur.execute("SHOW search_path")
-                    if schema not in cur.fetchone()["search_path"]:
-                        raise RuntimeError(f"could not select schema {schema}; use a direct (unpooled) DATABASE_URL")
+                cur.execute(f"SET search_path TO {schema or 'public'}")
+                cur.execute("SHOW search_path")
+                if (schema or "public") not in cur.fetchone()["search_path"]:
+                    raise RuntimeError(f"could not select schema {schema or 'public'}; use a direct (unpooled) DATABASE_URL")
                 for stmt in schema_sql.split(";"):
                     if stmt.strip():
                         cur.execute(stmt)
