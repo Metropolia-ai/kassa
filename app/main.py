@@ -76,7 +76,7 @@ async def access_gate(request: Request, call_next):
 
 @app.get("/api/health")
 def health():
-    return {"ok": True, "gate": bool(ACCESS_KEY)}
+    return {"ok": True, "gate": bool(ACCESS_KEY), "db": "postgres" if os.environ.get("DATABASE_URL") else "sqlite", "duet": DUET}
 
 # Vercel Hobby runs cron at most once a day, so status refresh is also done lazily on reads:
 # at most once per LAZY_REFRESH_S while the dashboard is open.

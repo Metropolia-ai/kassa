@@ -60,6 +60,10 @@
   .sc b { font-size:15px; }
   .sc p { margin:0; font-size:13px; color:var(--pencil); }
   .sc .exp { margin-top:auto; font-size:12px; font-weight:600; }
+  .sc .run { font-size:13px; font-weight:700; color:var(--ink); }
+  .sc:hover .run { text-decoration:underline; }
+  .steps { display:flex; flex-wrap:wrap; gap:6px 22px; margin:0 0 14px; padding:0; list-style:none; color:var(--pencil); font-size:14px; counter-reset:s; }
+  .steps li { counter-increment:s; } .steps li::before { content:counter(s) ". "; font-weight:700; color:var(--ink); }
   .sc .exp.alone { color:var(--paid); } .sc .exp.owners { color:var(--held); } .sc .exp.auto { color:var(--pencil); }
 
   /* ---------- stage ---------- */
@@ -80,7 +84,9 @@
   .knobs .save[hidden] { display:none; }
 
   /* needs you card inside a company */
-  .card { margin-top:14px; border:2px solid var(--held); background:var(--check-bg); border-radius:8px; padding:12px 14px; }
+  .card { margin-top:14px; border:2px solid var(--held); background:var(--check-bg); border-radius:8px; padding:12px 14px; animation:pulse 1.6s ease-in-out 3; }
+  @keyframes pulse { 0%,100% { box-shadow:0 0 0 0 color-mix(in srgb, var(--held) 55%, transparent); } 50% { box-shadow:0 0 0 10px transparent; } }
+  .co.waiting { border-color:var(--held); box-shadow:0 0 0 2px var(--held); }
   .card .t { font-weight:800; font-size:14px; margin-bottom:4px; }
   .card .why { font-size:13px; margin-bottom:10px; }
   .card .opts { display:flex; flex-direction:column; gap:6px; }
@@ -96,6 +102,12 @@
   .chips { display:flex; gap:6px; flex-wrap:wrap; }
   .chip { border:1px solid var(--rule); background:var(--ledger); border-radius:999px; padding:3px 10px; font-size:12px; cursor:pointer; color:var(--ink); }
   .chip.on { border-color:var(--ink); font-weight:600; }
+  .guide { display:flex; gap:10px; align-items:center; padding:10px 16px; border-bottom:1px solid var(--rule); font-size:14px; background:var(--paper); }
+  .guide .n { font-weight:800; font-size:11px; letter-spacing:.08em; text-transform:uppercase; padding:2px 7px; border-radius:3px; background:var(--ink); color:var(--sheet); white-space:nowrap; }
+  .guide.you .n { background:var(--held); color:var(--on-accent); }
+  .guide.done .n { background:var(--paid); color:var(--on-accent); }
+  .guide.wait .n { background:var(--pencil); color:var(--sheet); }
+  .guide .dots { margin-left:auto; }
   .feed { flex:1; padding:18px 18px 10px; display:flex; flex-direction:column; gap:14px; overflow:auto; }
   .feed .empty { color:var(--pencil); margin:auto; text-align:center; max-width:46ch; }
   .m { max-width:78%; display:flex; flex-direction:column; gap:4px; }
@@ -212,6 +224,7 @@
   <p class="lead">Two companies, two AI bookkeepers, one invoice. They check it, argue the difference and settle it on PayPal by themselves. A person is asked only when the gap is bigger than that person allowed.</p>
 
   <h2>Pick a scenario</h2>
+  <ul class="steps"><li>Pick a scenario: the agents start talking on their own.</li><li>Watch the wire in the middle; PayPal ids under each message are real sandbox objects.</li><li>When a card lights up on a company, that owner decides with one click.</li><li>Change the limits on either side and run the same scenario again.</li></ul>
   <div class="scenarios" id="scenarios"></div>
 
   <div class="stage">
@@ -226,6 +239,7 @@
         <button class="btn sm solid" id="btn-play" disabled>Play</button>
         <button class="btn sm quiet" id="btn-reset">Start over</button>
       </div>
+      <div class="guide" id="guide"><span class="n">Start</span><span>Pick a scenario above.</span></div>
       <div class="feed" id="feed"><div class="empty">Pick a scenario above. Pixelforge's bookkeeper will send an invoice and Frappua's will answer; every step shows up here.</div></div>
     </section>
 
@@ -296,12 +310,13 @@ function renderScenarios() {
     <button class="sc${CUR && CUR.scenario === s.key ? ' on' : ''}" data-key="${esc(s.key)}">
       <b>${esc(s.title)}</b><p>${esc(s.summary)}</p>
       <span class="exp ${EXPECT[s.expect] || 'auto'}">Expected: ${esc(s.expect)}</span>
+      <span class="run">Run this scenario →</span>
     </button>`).join('');
 }
 $('scenarios').onclick = async e => {
   const b = e.target.closest('.sc'); if (!b || STEPPING) return;
-  PLAYING = false;
-  try { working('Setting the scene…'); CUR = await api(`/duet/scenario/${b.dataset.key}`, {method:'POST'}); await load(); play(); }
+  PLAYING = false; seenStamps.clear();
+  try { working('Setting the scene…'); CUR = await api(`/duet/scenario/${b.dataset.key}`, {method:'POST'}); await load(); window.scrollTo({top: $('guide').getBoundingClientRect().top + window.scrollY - 90, behavior:'smooth'}); play(); }
   catch (err) { toast(err.message, true); } finally { working(null); }
 };
 
@@ -370,7 +385,18 @@ function ppLine(m) {
   if (d.cancel_error) bits.push('Cancel failed: ' + d.cancel_error);
   return bits.length ? `<div class="pp">${bits.map(b => `<span>${esc(b)}</span>`).join('')}</div>` : '';
 }
+function renderGuide() {
+  const g = $('guide');
+  const set = (cls, n, text, dots) => { g.className = 'guide ' + cls; g.innerHTML = `<span class="n">${esc(n)}</span><span>${esc(text)}</span>${dots ? '<span class="dots"><span></span><span></span><span></span></span>' : ''}`; };
+  if (!CUR) return set('', 'Start', 'Pick a scenario above. The agents start on their own.');
+  if (CUR.status === 'needs_humans') { const w = byKey(CUR.waiting); return set('you', 'Your turn', `${w.owner} at ${w.name}: the agents went as far as you allowed. Decide on the card on ${w.name}'s side.`); }
+  if (isFinal(CUR)) return set('done', 'Done', `${CUR.outcome || CUR.status}. Pick another scenario, or change a limit and run this one again.`);
+  if (STEPPING || PLAYING) { const who = byKey(CUR.turn); return set('', 'Watch', `${who.name}'s agent is working. Each step is a real PayPal call plus the model writing the message.`, true); }
+  return set('wait', 'Paused', 'Press Play to let the agents continue, or One step to go message by message.');
+}
 function renderFeed() {
+  renderGuide();
+  document.querySelectorAll('.co').forEach(el => el.classList.toggle('waiting', !!(CUR && CUR.status === 'needs_humans' && CUR.waiting && el.id === (CUR.waiting === STATE.buyer ? 'co-a' : 'co-b'))));
   const f = $('feed');
   $('btn-step').disabled = $('btn-play').disabled = !CUR || isFinal(CUR) || CUR.status === 'needs_humans';
   $('btn-play').textContent = PLAYING ? 'Pause' : 'Play';
@@ -406,7 +432,7 @@ async function step() {
   if (!CUR || STEPPING || isFinal(CUR) || CUR.status === 'needs_humans') return false;
   STEPPING = true; renderFeed();
   try { const t = await api(`/duet/threads/${CUR.id}/step`, {method:'POST'}); CUR = t; await load(); return t.changed; }
-  catch (err) { toast(err.message, true); PLAYING = false; return false; }
+  catch (err) { toast('The step did not finish: ' + err.message + ' Press Play to try again.', true); PLAYING = false; return false; }
   finally { STEPPING = false; renderFeed(); }
 }
 async function play() {
