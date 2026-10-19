@@ -153,16 +153,30 @@ class Kassa:
         return self.store.get_bill(bill_id)
 
     def balance(self, currency: str | None = None) -> dict | None:
-        """PayPal's last balance snapshot minus what Kassa sent after it (PayPal's figure lags ~1 h)."""
+        """What is left on the PayPal account, as far as Kassa can tell.
+
+        PayPal's Balances API is an hourly snapshot and, for sandbox accounts whose balance was set by hand,
+        it never learns the real figure. So when KASSA_OPENING_BALANCE / KASSA_OPENING_AT are set, Kassa
+        starts from that known figure and subtracts its own ledger of payouts since then. Without them it
+        falls back to the snapshot minus what was sent after the snapshot time."""
         if not self.paypal:
             return None
         cur = currency or self.currency
-        snap = self.paypal.get_balance(cur)
-        if not snap:
+        opening, opening_at = os.environ.get("KASSA_OPENING_BALANCE"), os.environ.get("KASSA_OPENING_AT")
+        if opening and opening_at:
+            sent = self.store.sent_since(opening_at, cur)
+            value = round(float(opening) - sent, 2)
+            as_of = opening_at
+        else:
+            snap = self.paypal.get_balance(cur)
+            if not snap:
+                return None
+            as_of = snap["as_of"].replace("Z", "+00:00")  # same shape as store timestamps, so text compare works
+            sent = self.store.sent_since(as_of, cur) if as_of else 0.0
+            value = round(snap["value"] - sent, 2)
+        if value < 0:  # the source figure is stale; a negative balance is worse than none
             return None
-        as_of = snap["as_of"].replace("Z", "+00:00")  # same shape as store timestamps, so text compare works
-        sent = self.store.sent_since(as_of, cur) if as_of else 0.0
-        return {"value": round(snap["value"] - sent, 2), "as_of": snap["as_of"], "sent_since": round(sent, 2)}
+        return {"value": value, "as_of": as_of, "sent_since": round(sent, 2)}
 
     def pay_all_approved(self, actor: str = "agent") -> list[dict]:
         out = []
@@ -188,6 +202,8 @@ class Kassa:
                 new_status = payout_to_bill_status(st)
                 if st != b.get("payout_status") or new_status != b["status"]:
                     extra = {"reason": f"PayPal returned {st}"} if new_status == "failed" else {}
+                    if new_status == "failed" and b["status"] != "failed":  # money came back
+                        self.store.add_ledger(-float(b["amount"]), b.get("currency") or self.currency)
                     self.store.update_bill(b["id"], payout_status=st, status=new_status,
                                            payout_item_id=items[0].get("payout_item_id"), **extra)
                     changed.append({"id": b["id"], "payout_status": st, "status": new_status})
