@@ -344,7 +344,7 @@ async function api(path, opts = {}) {
   const r = await fetch('/api' + path, {...opts, headers:{'Content-Type':'application/json', 'X-Kassa-Key': getKey(), ...(opts.headers || {})}});
   const j = await r.json().catch(() => ({}));
   if (r.status === 401) { askKey('That key did not work. Check it and try again.'); throw new Error('Access key required.'); }
-  if (!r.ok) throw new Error(j.error || (j.body && j.body.message) || 'The server returned ' + r.status + '.');
+  if (!r.ok) throw new Error((j.body && j.body.message) || j.error || 'The server returned ' + r.status + '.');
   return j;
 }
 function askKey(msg) { $('gate-err').textContent = msg || ''; $('gate-key').value = ''; if (!$('gate').open) $('gate').showModal(); setTimeout(() => $('gate-key').focus(), 30); }
@@ -518,7 +518,7 @@ $('queue').onclick = e => {
 async function load() {
   const [cfg, bills, invs, audit, chat] = await Promise.all([api('/config'), api('/bills'), api('/invoices'), api('/audit'), api('/chat')]);
   CFG = cfg; BILLS = bills;
-  $('who').textContent = `${cfg.merchant_name}, PayPal ${cfg.env}`;
+  $('who').textContent = `${cfg.merchant_name}, PayPal ${cfg.env}` + (cfg.paypal_balance != null ? `, balance ${money(cfg.paypal_balance, cfg.currency)}` : '');
   if (document.activeElement !== $('limit-in') && $('limit-save').hidden) $('limit-in').value = cfg.auto_pay_limit; $('limit-cur').textContent = cfg.currency;
   const ce = document.querySelector('#form-invoice [name=customer_email]'); if (ce && !ce.value && cfg.demo_customer_email) ce.value = cfg.demo_customer_email;
   billsGrid.setGridOption('rowData', bills); invGrid.setGridOption('rowData', invs); auditGrid.setGridOption('rowData', audit);

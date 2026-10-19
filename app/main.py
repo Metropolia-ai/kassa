@@ -150,7 +150,8 @@ def config():
             "currency": kassa.currency, "auto_pay_limit": kassa.auto_pay_limit,
             "paypal": bool(kassa.paypal), "env": os.environ.get("PAYPAL_ENV", "sandbox"),
             "llm": (f"{llm.provider()}:{llm.model_name()}" if llm.provider() else "rules (demo mode)"),
-            "demo_customer_email": os.environ.get("DEMO_CUSTOMER_EMAIL", "")}
+            "demo_customer_email": os.environ.get("DEMO_CUSTOMER_EMAIL", ""),
+            "paypal_balance": kassa.balance()}
 
 
 # --- bills ---------------------------------------------------------------

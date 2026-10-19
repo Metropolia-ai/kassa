@@ -24,7 +24,9 @@ class PayPalError(RuntimeError):
         self.body = body
         name = body.get("name") if isinstance(body, dict) else None
         debug_id = body.get("debug_id") if isinstance(body, dict) else None
-        super().__init__(f"PayPal {status} {name or ''} debug_id={debug_id or '-'}: {body}")
+        message = body.get("message") if isinstance(body, dict) else None
+        super().__init__(f"PayPal {status} {name or ''}: {message}" if message
+                         else f"PayPal {status} {name or ''} debug_id={debug_id or '-'}: {body}")
 
 
 @dataclass
@@ -143,6 +145,17 @@ class PayPalClient:
         return self._request("GET", "/v2/invoicing/invoices", params={"page_size": page_size, "total_required": "true"})
 
     # --- reporting ---------------------------------------------------------
+    def get_balance(self, currency: str) -> float | None:
+        """Available balance in the given currency, or None if PayPal will not tell us."""
+        try:
+            res = self._request("GET", "/v1/reporting/balances", params={"currency_code": currency})
+        except PayPalError:
+            return None
+        for bal in res.get("balances", []):
+            if bal.get("currency") == currency:
+                return float(bal["available_balance"]["value"])
+        return None
+
     def list_transactions(self, start_iso: str, end_iso: str, page_size: int = 100) -> dict:
         return self._request("GET", "/v1/reporting/transactions",
                              params={"start_date": start_iso, "end_date": end_iso, "fields": "all",
