@@ -41,7 +41,7 @@ def test_extra_hours_settles_without_people(duet):
     t = run(duet, t["id"])
     assert t["status"] == "settled"
     assert t["agreed_amount"] == 337.0
-    assert t["outcome"] == "settled by the agents alone"
+    assert t["outcome"].startswith("settled by the agents in") and t["outcome"].endswith("no one interrupted")
     acts = [a for _, _, a in actions(t)]
     assert acts == ["invoice", "query", "explain", "accept", "paid", "settled"]
     assert all(author == "agent" for _, author, _ in actions(t))
@@ -64,7 +64,7 @@ def test_scope_doubled_needs_both_owners(duet):
     assert t["status"] == "proposed"
     t = run(duet, t["id"])
     assert t["status"] == "settled" and t["agreed_amount"] == 1800.0
-    assert t["outcome"] == "settled after the owners decided"
+    assert "after the owner decided" in t["outcome"]
     assert t["invoice_number"].endswith("R")  # reissued for the agreed amount
     assert any(a == "reissue" for _, _, a in actions(t))
 
@@ -112,8 +112,55 @@ def test_policy_knobs_change_the_outcome(duet):
     assert [a for _, _, a in actions(t)] == ["invoice", "accept", "paid", "settled"]
 
 
-def test_reset_clears_everything(duet):
+def test_reset_clears_threads_and_keeps_two_months_of_history(duet):
     run(duet, duet.start("extra-hours")["id"])
     duet.reset()
     assert duet.list_threads() == []
-    assert duet.companies["frappua"].kassa.store.list_bills() == []
+    bills = duet.companies["frappua"].kassa.store.list_bills()
+    assert bills and all(b["status"] == "paid" for b in bills)          # seeded history only
+    assert duet.companies["pixelforge"].kassa.store.list_customer_invoices()
+
+
+def test_invoice_numbers_are_sequential_and_survive_reset(duet):
+    a = duet.start("extra-hours")["invoice_number"]
+    b = duet.start("scope-doubled")["invoice_number"]
+    assert a == "PF-2026-0418" and b == "PF-2026-0419"
+    duet.reset()
+    assert duet.start("extra-hours")["invoice_number"] == "PF-2026-0420"
+
+
+def test_supplier_sends_a_draft_and_the_clock_does_the_rest(duet):
+    drafts = duet.drafts()
+    assert [d["key"] for d in drafts] == ["extra-hours", "scope-doubled", "duplicate"]
+    t = duet.send_draft("extra-hours")
+    assert t["status"] == "invoiced"                                    # the invoice went out at once
+    inv = duet.companies["pixelforge"].kassa.store.list_customer_invoices()[0]
+    assert inv["invoice_number"] == t["invoice_number"] and inv["status"] == "SENT"
+    for _ in range(10):
+        if not duet.tick():
+            break
+    t = duet.get_thread(t["id"])
+    assert t["status"] == "settled"
+    mine = duet.threads_for("frappua")[-1]
+    assert mine["role"] == "buyer" and mine["other"] == "Pixelforge Oy" and mine["humans"] == 0
+
+
+def test_buyer_sees_the_bill_as_negotiating_then_waiting_for_the_owner(duet):
+    t = duet.send_draft("scope-doubled")
+    duet.tick(); duet.tick()
+    bill = duet.companies["frappua"].kassa.store.get_bill(duet.get_thread(t["id"])["bill_id"])
+    assert bill["status"] == "negotiating" and "checking with Pixelforge Oy" in bill["reason"]
+    while duet.tick():
+        pass
+    bill = duet.companies["frappua"].kassa.store.get_bill(bill["id"])
+    assert bill["status"] == "negotiating" and bill["reason"].startswith("waiting for Dima")
+    assert duet.threads_for("frappua")[-1]["decisions"] and not duet.threads_for("pixelforge")[-1]["decisions"]
+
+
+def test_chat_tool_explains_a_settlement(duet):
+    t = duet.send_draft("extra-hours")
+    while duet.tick():
+        pass
+    out = duet.companies["frappua"].kassa.run_tool("bill_conversation", {"invoice_number": t["invoice_number"]})
+    assert out["agreed_amount"] == 337.0 and out["people_involved"] == 0
+    assert any(m["action"] == "explain" for m in out["messages"])

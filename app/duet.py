@@ -76,6 +76,24 @@ class Duet:
     def __init__(self, db_path: str, companies: dict[str, Company], schema: str | None = "duet"):
         self.db = _DB(db_path, schema, DDL)
         self.companies = companies
+        for c in companies.values():
+            c.kassa.extra_tools.append(({
+                "name": "bill_conversation",
+                "description": "What our agent and the other company's agent said about a bill or invoice, with the order "
+                               "comparison, the evidence, the owner's decisions and the outcome. Use it to explain why an amount was paid.",
+                "input_schema": {"type": "object", "properties": {"invoice_number": {"type": "string"}, "bill_id": {"type": "integer"}}}},
+                lambda args, key=c.key: self.conversation(key, args.get("invoice_number"), args.get("bill_id"))))
+
+    def conversation(self, company: str, invoice_number: str | None = None, bill_id: int | None = None) -> dict:
+        for t in self.threads_for(company):
+            if (invoice_number and invoice_number.upper() in (t.get("invoice_number") or "").upper()) or (bill_id and t.get("bill_id") == bill_id):
+                check = next((r["data"] for r in self.records(t["buyer"], "check", thread_id=t["id"])), {})
+                return {"invoice_number": t["invoice_number"], "status": t["status"], "outcome": t.get("outcome"),
+                        "invoice_amount": t["invoice_amount"], "agreed_amount": t.get("agreed_amount"), "currency": t["currency"],
+                        "order": check, "seconds": t["seconds"], "people_involved": t["humans"],
+                        "messages": [{"from": (self.companies[m["company"]].name if m["company"] in self.companies else m["company"]),
+                                      "who": m["author"], "action": m["action"], "text": m["text"]} for m in t["messages"]]}
+        return {"error": "no conversation found for that bill"}
 
     # ----------------------------------------------------------------- data
     def _rows(self, sql: str, params: tuple = ()) -> list[dict]:
@@ -163,10 +181,20 @@ class Duet:
     def scenarios(self) -> list[dict]:
         return json.loads((ROOT / "samples" / "duet" / "scenarios.json").read_text(encoding="utf-8"))
 
-    @staticmethod
-    def _run_tag() -> str:
-        """PayPal wants invoice numbers unique per account, so every demo run gets a short random suffix."""
-        return secrets.token_hex(2).upper()
+    def _setting(self, key: str, default: str | None = None) -> str | None:
+        v = self._row("SELECT value FROM settings WHERE key=?", (key,))
+        return v["value"] if v else default
+
+    def _set_setting(self, key: str, value: str) -> None:
+        self.db.execute("DELETE FROM settings WHERE key=?", (key,))
+        self.db.execute("INSERT INTO settings (key, value) VALUES (?,?)", (key, value))
+
+    def next_invoice_number(self, prefix: str = "PF-2026-", start: int = 418) -> str:
+        """Sequential numbers, like a real invoicing system. PayPal rejects a number it has seen on the
+        supplier's account, so the counter lives in settings and is never reset."""
+        n = int(self._setting("invoice_seq", str(start - 1))) + 1
+        self._set_setting("invoice_seq", str(n))
+        return f"{prefix}{n:04d}"
 
     def start(self, scenario_key: str) -> dict:
         sc = next((s for s in self.scenarios() if s["key"] == scenario_key), None)
@@ -175,7 +203,7 @@ class Duet:
         buyer, supplier = self.buyer_key(), self.supplier_key()
         cur = self.companies[buyer].kassa.currency
         inv = sc["invoice"]
-        number = f"{inv['number']}-{self._run_tag()}"
+        number = self.next_invoice_number(inv.get("prefix", "PF-2026-"))
         amount = _total(inv["items"])
         tid = self.db.insert(
             "INSERT INTO threads (created_at, updated_at, scenario, title, buyer, supplier, invoice_number, po_number, "
@@ -190,16 +218,57 @@ class Duet:
             # the duplicate scenario needs the original on both sides' books: the last settled one, or a seeded one
             kb, ks = self.companies[buyer].kassa, self.companies[supplier].kassa
             if not kb.store.find_similar(self.companies[supplier].email, amount, 0):
-                prev = f"{inv['number']}-{self._run_tag()}"
-                b = kb.ingest_structured(f"seed {prev}", _invoice_text(self.companies[supplier], self.companies[buyer], prev, inv, cur),
+                prev = self.next_invoice_number(inv.get("prefix", "PF-2026-"))
+                number = self.next_invoice_number(inv.get("prefix", "PF-2026-"))  # the resend gets the later number
+                self._update(tid, invoice_number=number)
+                when = (date.today() - timedelta(days=3)).isoformat()
+                b = kb.ingest_structured(f"{self.companies[supplier].name} {prev}", _invoice_text(self.companies[supplier], self.companies[buyer], prev, inv, cur),
                                          _fields(self.companies[supplier], prev, inv, cur))
-                kb.store.update_bill(b["id"], status="paid", reason="paid on " + (date.today() - timedelta(days=3)).isoformat() + " (seeded for the demo)",
-                                     payout_status="SUCCESS")
+                kb.store.update_bill(b["id"], status="paid", reason="within policy: trusted supplier, matches the order", payout_status="SUCCESS",
+                                     created_at=f"{when}T09:12:00+00:00")
                 ks.store.add_customer_invoice(paypal_invoice_id=None, invoice_number=prev, customer_name=self.companies[buyer].name,
                                               customer_email=self.companies[buyer].email, amount=amount, currency=cur,
-                                              due_date=_due(14), memo="seeded for the demo", status="MARKED_AS_PAID")
-        self._say(tid, "system", "system", "start", sc["summary"], None, {"scenario": sc["key"]})
+                                              due_date=_due(11), memo=inv.get("memo"), status="PAID", created_at=f"{when}T09:10:00+00:00")
         return self.get_thread(tid)
+
+    # ---------------------------------------------------------------- drafts
+    def drafts(self) -> list[dict]:
+        """What the supplier's owner can send: the scenarios, seen from their side as invoices ready to go."""
+        out = []
+        for sc in self.scenarios():
+            inv = sc["invoice"]
+            out.append({"key": sc["key"], "title": inv.get("title") or sc["title"], "note": inv.get("memo"),
+                        "amount": _total(inv["items"]), "currency": self.companies[self.buyer_key()].kassa.currency,
+                        "items": inv["items"], "customer": self.companies[self.buyer_key()].name,
+                        "hint": sc.get("hint", "")})
+        return out
+
+    def send_draft(self, key: str) -> dict:
+        """The supplier's owner presses Send: the invoice goes out through PayPal right away; the rest follows on its own."""
+        t = self.start(key)
+        return self.step(t["id"])
+
+    def tick(self) -> list[dict]:
+        """Advance every thread where it is an agent's turn, one step each. Called by whichever window is open."""
+        changed = []
+        for t in self._rows("SELECT id, status FROM threads WHERE status NOT IN ('needs_humans','settled','closed','failed') ORDER BY id"):
+            out = self.step(t["id"])
+            if out["changed"]:
+                changed.append({"id": out["id"], "status": out["status"]})
+        return changed
+
+    def threads_for(self, company: str) -> list[dict]:
+        out = []
+        for t in self.list_threads():
+            if company not in (t["buyer"], t["supplier"]):
+                continue
+            t["decisions"] = [d for d in t["decisions"] if d["company"] == company]
+            t["role"] = "buyer" if company == t["buyer"] else "supplier"
+            t["other"] = self.companies[t["supplier"] if t["role"] == "buyer" else t["buyer"]].name
+            t["seconds"] = _seconds(t["messages"])
+            t["humans"] = sum(1 for m in t["messages"] if m["author"] == "human")
+            out.append(t)
+        return out
 
     # ------------------------------------------------------------------ step
     def step(self, tid: int) -> dict:
@@ -245,10 +314,19 @@ class Duet:
         inv = sc["invoice"]
         data: dict = {"items": inv["items"], "amount": t["invoice_amount"]}
         if sup.kassa.paypal:
-            row = sup.kassa.create_customer_invoice(
-                customer_name=buy.name, customer_email=buy.email, items=_pp_items(inv["items"]),
-                due_in_days=inv.get("due_in_days", 14), memo=inv.get("memo"), actor="agent",
-                reason=f"invoice {t['invoice_number']} to {buy.name}", invoice_number=t["invoice_number"])
+            for _ in range(6):
+                try:
+                    row = sup.kassa.create_customer_invoice(
+                        customer_name=buy.name, customer_email=buy.email, items=_pp_items(inv["items"]),
+                        due_in_days=inv.get("due_in_days", 14), memo=inv.get("memo"), actor="agent",
+                        reason=f"invoice {t['invoice_number']} to {buy.name}", invoice_number=t["invoice_number"])
+                    break
+                except PayPalError as e:
+                    issues = [d.get("issue") for d in (e.body or {}).get("details", [])] if isinstance(e.body, dict) else []
+                    if "DUPLICATE_INVOICE_NUMBER" not in issues:
+                        raise
+                    t["invoice_number"] = self.next_invoice_number(inv.get("prefix", "PF-2026-"))  # someone used it before us
+                    self._update(t["id"], invoice_number=t["invoice_number"])
             data.update({"paypal_invoice_id": row.get("paypal_invoice_id"), "paypal_status": row.get("status"),
                          "pay_url": row.get("pay_url")})
             self._update(t["id"], paypal_invoice_id=row.get("paypal_invoice_id"), invoice_row_id=row.get("id"))
@@ -285,6 +363,7 @@ class Duet:
                                                              "earlier_number": prev.get("invoice_number"),
                                                              "earlier_status": _plain_status(prev.get("status"))})
             self._say(t["id"], buy.key, "agent", "query", text, None, {"duplicate_of": prev.get("invoice_number"), "earlier_bill": prev["id"]})
+            buy.kassa.store.update_bill(bill["id"], status="negotiating", reason=f"checking with {sup.name}'s agent: looks like {prev.get('invoice_number')}, which we already paid")
             self._update(t["id"], status="disputed", turn=t["supplier"])
             return
         pol = self.policy(buy.key)
@@ -307,6 +386,9 @@ class Duet:
                                                "po_total": po_total, "invoice_total": t["invoice_amount"], "currency": cur,
                                                "differences": _diff_text(diffs), "tolerance": tol})
         self._say(t["id"], buy.key, "agent", "query", text, None, {"gap": gap, "tolerance": tol, "diffs": diffs, "po_total": po_total})
+        buy.kassa.store.update_bill(bill["id"], status="negotiating",
+                                    reason=f"checking with {sup.name}'s agent: {_money(gap, cur)} over what we agreed ({po['number']}), "
+                                           f"the agent may accept {_money(tol, cur)} on its own")
         self._update(t["id"], status="disputed", turn=t["supplier"])
 
     # supplier: explain or concede ----------------------------------------------
@@ -446,10 +528,11 @@ class Duet:
         bill = k.store.get_bill(t["bill_id"]) if t.get("bill_id") else None
         if not bill:
             raise RuntimeError("the buyer's bill is missing")
-        why = next((m for m in reversed(t["messages"]) if m["action"] == "accept"), {}).get("text", "agreed between the agents")
+        acc = next((m for m in reversed(t["messages"]) if m["action"] == "accept"), {})
+        why = (acc.get("data") or {}).get("why") or acc.get("text") or "agreed between the agents"
         decided_by_human = any(m["author"] == "human" for m in t["messages"])
         k.store.update_bill(bill["id"], status="approved", amount=agreed, invoice_number=t["invoice_number"],
-                            reason=("decided by the owner: " if decided_by_human else "agreed between the agents within policy: ") + why)
+                            reason=("decided by the owner: " if decided_by_human else "agreed within policy: ") + why)
         k.store.audit("agent" if not decided_by_human else "human", "approve_bill", {"bill_id": bill["id"], "thread": t["id"]},
                       {"status": "approved", "amount": agreed}, why, True)
         data: dict = {"amount": agreed}
@@ -492,11 +575,17 @@ class Duet:
             data["invoice_status"] = "MARKED_AS_PAID"
         sup.kassa.store.add_ledger(-agreed, t["currency"])  # money in: the supplier's balance goes up
         text = self._voice(sup, buy, "settled", {"invoice_number": t["invoice_number"], "amount": agreed, "currency": t["currency"],
-                                                 "invoice_status": data.get("invoice_status", "PAID"),
-                                                 "payout_status": data.get("payout_status")})
+                                                 "invoice_status": _plain_invoice(data.get("invoice_status", "PAID")),
+                                                 "payout_status": _plain_payout(data.get("payout_status"))})
         self._say(t["id"], sup.key, "agent", "settled", text, agreed, data)
         humans = sorted({m["company"] for m in t["messages"] if m["author"] == "human"})
-        outcome = "settled by the agents alone" if not humans else "settled after the owners decided"
+        secs = _seconds(t["messages"])
+        outcome = (f"settled by the agents in {secs} s, no one interrupted" if not humans
+                   else f"settled in {secs} s after the owner decided")
+        if t.get("bill_id"):
+            b = buy.kassa.store.get_bill(t["bill_id"])
+            if b:
+                buy.kassa.store.update_bill(t["bill_id"], reason=f"{outcome}. {b.get('reason') or ''}".strip())
         self._update(t["id"], status="settled", turn=None, outcome=outcome, waiting=None)
 
     # rejected: supplier withdraws the invoice -------------------------------------------
@@ -513,11 +602,11 @@ class Duet:
                 data["cancel_error"] = str(e)
         facts = {"invoice_number": t["invoice_number"]}
         if earlier:
-            facts.update({"earlier_number": earlier["invoice_number"], "earlier_status": earlier.get("status")})
+            facts.update({"earlier_number": earlier["invoice_number"], "earlier_status": _plain_invoice(earlier.get("status"))})
         text = self._voice(sup, buy, "withdraw", facts)
         self._say(t["id"], sup.key, "agent", "withdraw", text, None, data)
-        outcome = (f"duplicate of {earlier['invoice_number']} withdrawn, nobody had to look" if earlier
-                   else "duplicate withdrawn, nobody had to look")
+        outcome = (f"duplicate of {earlier['invoice_number']}, withdrawn by {sup.name}'s agent in {_seconds(t['messages'])} s, no one interrupted" if earlier
+                   else "duplicate withdrawn, no one interrupted")
         self._update(t["id"], status="closed", turn=None, outcome=outcome)
 
     # ------------------------------------------------------------- outcomes
@@ -530,6 +619,8 @@ class Duet:
 
     def _escalate(self, t: dict, who: Company, why: str, options: list[dict]) -> None:
         other = self.companies[t["buyer"] if who.key == t["supplier"] else t["supplier"]]
+        if who.key == t["buyer"] and t.get("bill_id"):
+            who.kassa.store.update_bill(t["bill_id"], status="negotiating", reason=f"waiting for {who.owner}: {why}")
         text = self._voice(who, other, "escalate", {"invoice_number": t["invoice_number"], "why": why, "owner": who.owner})
         self._say(t["id"], who.key, "agent", "escalate", text, None, {"why": why, "options": options})
         self._update(t["id"], status="needs_humans", turn=None, waiting=who.key)
@@ -590,6 +681,40 @@ class Duet:
                           None, {"why": f"{me.name} insists on the full amount", "options": esc_opts})
         return self.get_thread(tid)
 
+    # --------------------------------------------------------------- history
+    def seed_history(self) -> None:
+        """Two months of ordinary business on both sides, so the first screen looks like a company, not a lab."""
+        buy, sup = self.companies[self.buyer_key()], self.companies[self.supplier_key()]
+        kb, ks = buy.kassa, sup.kassa
+        if kb.store.list_bills():
+            return
+        cur = kb.currency
+        kb.store.upsert_supplier(sup.email, sup.name, trusted=True)
+        kb.store.upsert_supplier("ar@cloudbox.example.net", "Cloudbox Hosting", trusted=True)
+        hist = [  # (days ago, supplier, email, number, memo, items)
+            (58, sup, sup.email, "PF-2026-0401", "Render farm, second half of August", [{"name": "GPU render hours", "qty": 31, "unit": 6.50}, {"name": "Storage 2 TB, half month", "qty": 1, "unit": 12.00}]),
+            (49, None, "ar@cloudbox.example.net", "CB-09-2214", "Hosting, September", [{"name": "Shared hosting, frappua.win", "qty": 1, "unit": 19.90}, {"name": "Domain renewal", "qty": 1, "unit": 14.00}]),
+            (43, sup, sup.email, "PF-2026-0407", "Render farm, first half of September", [{"name": "GPU render hours", "qty": 44, "unit": 6.50}, {"name": "Storage 2 TB, half month", "qty": 1, "unit": 12.00}]),
+            (28, sup, sup.email, "PF-2026-0411", "Render farm, second half of September", [{"name": "GPU render hours", "qty": 36, "unit": 6.50}, {"name": "Storage 2 TB, half month", "qty": 1, "unit": 12.00}]),
+            (19, None, "ar@cloudbox.example.net", "CB-10-2291", "Hosting, October", [{"name": "Shared hosting, frappua.win", "qty": 1, "unit": 19.90}, {"name": "Domain renewal", "qty": 1, "unit": 14.00}]),
+            (12, sup, sup.email, "PF-2026-0415", "Character rig, Guidepost", [{"name": "Character rig", "qty": 1, "unit": 480.00}]),
+        ]
+        for days, s_co, email, number, memo, items in hist:
+            when = (date.today() - timedelta(days=days)).isoformat()
+            name = s_co.name if s_co else "Cloudbox Hosting"
+            inv = {"items": items, "due_in_days": 14, "memo": memo}
+            fake = Company(key="x", name=name, email=email, kassa=kb)
+            b = kb.ingest_structured(f"{name} {number}", _invoice_text(fake, buy, number, inv, cur), _fields(fake, number, inv, cur))
+            kb.store.update_bill(b["id"], status="paid", payout_status="SUCCESS", created_at=f"{when}T09:12:00+00:00",
+                                 invoice_date=when, due_date=(date.fromisoformat(when) + timedelta(days=14)).isoformat(),
+                                 reason="within policy: trusted supplier, matches what we agreed" if days != 12 else
+                                        "settled by the agents in 11 s, no one interrupted. The rig was priced as quoted on 2 Oct")
+            if s_co:
+                ks.store.add_customer_invoice(paypal_invoice_id=None, invoice_number=number, customer_name=buy.name, customer_email=buy.email,
+                                              amount=_total(items), currency=cur, due_date=(date.fromisoformat(when) + timedelta(days=14)).isoformat(),
+                                              memo=memo, status="PAID", created_at=f"{when}T09:10:00+00:00")
+        kb.store.audit("agent", "history", {}, {}, "two months of bills on the books", True)
+
     # ------------------------------------------------------------------ misc
     def refresh(self) -> dict:
         """Ask PayPal for the latest payout and invoice statuses on both sides; mirror payouts into the threads."""
@@ -611,6 +736,7 @@ class Duet:
             self.db.execute(f"DELETE FROM {tbl}")
         for c in self.companies.values():
             c.kassa.store.reset()
+        self.seed_history()
 
     def _scenario(self, t: dict) -> dict:
         return next(s for s in self.scenarios() if s["key"] == t["scenario"])
@@ -710,6 +836,29 @@ def _is_staff(name: str, c: Company) -> bool:
     return any(s.lower() in n for s in c.staff) or c.name.lower() in n
 
 
+def _plain_invoice(st: str | None) -> str:
+    return {"PAID": "paid", "MARKED_AS_PAID": "marked as paid", "SENT": "sent", "UNPAID": "unpaid", "CANCELLED": "withdrawn",
+            "PARTIALLY_PAID": "partly paid"}.get((st or "").upper(), (st or "on our books").lower())
+
+
+def _plain_payout(st: str | None) -> str | None:
+    if not st:
+        return None
+    return {"SUCCESS": "confirmed by PayPal", "PENDING": "on its way, PayPal is confirming", "PROCESSING": "being processed by PayPal",
+            "UNCLAIMED": "waiting to be claimed"}.get(st.upper(), st.lower())
+
+
+def _seconds(messages: list[dict]) -> int:
+    from datetime import datetime as _dt
+    agent = [m for m in messages if m.get("company") != "system"]
+    if len(agent) < 2:
+        return 0
+    try:
+        return max(0, int((_dt.fromisoformat(agent[-1]["ts"]) - _dt.fromisoformat(agent[0]["ts"])).total_seconds()))
+    except (ValueError, KeyError):
+        return 0
+
+
 def _plain_status(st: str | None) -> str:
     return {"paid": "paid", "sent": "paid, PayPal is confirming", "unclaimed": "paid, waiting to be claimed",
             "approved": "approved for payment"}.get(st or "", st or "on our books")
@@ -747,7 +896,7 @@ def _template(me: Company, other: Company, action: str, f: dict) -> str:
         pp = f" PayPal payout {f['payout_batch_id']}." if f.get("payout_batch_id") else ""
         return f"Paid {_money(f['amount'], cur)} for {f['invoice_number']} to {f['to']}.{pp}"
     if action == "settled":
-        ps = f", payout {f['payout_status']}" if f.get("payout_status") else ""
+        ps = f"; the payout is {f['payout_status']}" if f.get("payout_status") else ""
         return f"Payment received and recorded, invoice {f['invoice_number']} is {f['invoice_status']}{ps}. Thank you."
     if action == "query_duplicate":
         return (f"Invoice {f['invoice_number']} for {_money(f['amount'], cur)} looks like {f['earlier_number']}, "

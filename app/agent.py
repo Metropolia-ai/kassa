@@ -32,6 +32,7 @@ class Kassa:
         env_ob, env_at = os.environ.get("KASSA_OPENING_BALANCE"), os.environ.get("KASSA_OPENING_AT")
         self.opening_balance = opening_balance if opening_balance is not None else (float(env_ob) if env_ob else None)
         self.opening_at = opening_at or env_at
+        self.extra_tools: list[tuple[dict, Callable[[dict], Any]]] = []  # (schema, fn) added by other modules
 
     # Stored in the database so every serverless instance sees the same value.
     @property
@@ -300,7 +301,7 @@ class Kassa:
              "input_schema": {"type": "object", "properties": {}}},
             {"name": "list_audit", "description": "Show the most recent audit log entries.",
              "input_schema": {"type": "object", "properties": {"limit": {"type": "integer"}}}},
-        ]
+        ] + [schema for schema, _ in self.extra_tools]
 
     def run_tool(self, name: str, args: dict) -> Any:
         if name == "list_bills":
@@ -319,6 +320,9 @@ class Kassa:
             return {"payouts": self.refresh_payouts(), "invoices": self.refresh_customer_invoices()}
         if name == "list_audit":
             return self.store.list_audit(int(args.get("limit") or 20))
+        for schema, fn in self.extra_tools:
+            if schema["name"] == name:
+                return fn(args)
         raise KeyError(name)
 
     def chat(self, user_text: str) -> str:
@@ -337,7 +341,9 @@ class Kassa:
                   "You pay supplier bills and issue customer invoices through PayPal using the tools. "
                   "You can only pay bills a human or policy has approved; if a tool refuses, say why and "
                   "tell the user to approve the bill in the queue. Always give a one-line reason when you move money. "
-                  "Be brief and concrete: amounts, ids, statuses.")
+                  "Be brief and concrete: amounts, ids, statuses. "
+                  + ("Some suppliers and customers also run Kassa; their agent and ours settle invoices between themselves, "
+                     "and bill_conversation shows that exchange. " if self.extra_tools else ""))
         history = [{"role": m["role"], "content": m["content"]} for m in self.store.list_chat(12)[:-1]]
         def traced(name, args):
             self._trace.append(name)
