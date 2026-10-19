@@ -68,7 +68,9 @@ class _DB:
     """Minimal uniform layer: execute(sql, params) with '?' placeholders, rows as dicts, autocommit."""
 
     def __init__(self, path: str):
-        self.url = os.environ.get("DATABASE_URL")
+        # Prefer a direct connection: Neon's pooled URL shares server sessions between callers, and a
+        # session that once ran SET search_path keeps it for everyone, so tables can land in the wrong schema.
+        self.url = os.environ.get("DATABASE_URL_UNPOOLED") or os.environ.get("DATABASE_URL")
         if self.url:
             import psycopg
             from psycopg.rows import dict_row
@@ -76,6 +78,7 @@ class _DB:
             self.conn = psycopg.connect(self.url, autocommit=True, row_factory=dict_row)
             schema = SCHEMA.replace("INTEGER PRIMARY KEY AUTOINCREMENT", "SERIAL PRIMARY KEY")
             with self.conn.cursor() as cur:
+                cur.execute("SET search_path TO public")
                 for stmt in schema.split(";"):
                     if stmt.strip():
                         cur.execute(stmt)
