@@ -145,15 +145,16 @@ class PayPalClient:
         return self._request("GET", "/v2/invoicing/invoices", params={"page_size": page_size, "total_required": "true"})
 
     # --- reporting ---------------------------------------------------------
-    def get_balance(self, currency: str) -> float | None:
-        """Available balance in the given currency, or None if PayPal will not tell us."""
+    def get_balance(self, currency: str) -> dict | None:
+        """PayPal's balance snapshot: {"value": float, "as_of": iso}. PayPal refreshes it about hourly,
+        so callers subtract what they sent after as_of. None if PayPal will not tell us."""
         try:
             res = self._request("GET", "/v1/reporting/balances", params={"currency_code": currency})
         except PayPalError:
             return None
         for bal in res.get("balances", []):
             if bal.get("currency") == currency:
-                return float(bal["available_balance"]["value"])
+                return {"value": float(bal["available_balance"]["value"]), "as_of": res.get("as_of_time") or ""}
         return None
 
     def list_transactions(self, start_iso: str, end_iso: str, page_size: int = 100) -> dict:

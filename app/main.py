@@ -146,12 +146,13 @@ def index():
 
 @app.get("/api/config")
 def config():
+    bal = kassa.balance()
     return {"merchant_name": kassa.merchant_name, "merchant_email": kassa.merchant_email,
             "currency": kassa.currency, "auto_pay_limit": kassa.auto_pay_limit,
             "paypal": bool(kassa.paypal), "env": os.environ.get("PAYPAL_ENV", "sandbox"),
             "llm": (f"{llm.provider()}:{llm.model_name()}" if llm.provider() else "rules (demo mode)"),
             "demo_customer_email": os.environ.get("DEMO_CUSTOMER_EMAIL", ""),
-            "paypal_balance": kassa.balance()}
+            "paypal_balance": (bal or {}).get("value"), "balance_as_of": (bal or {}).get("as_of")}
 
 
 # --- bills ---------------------------------------------------------------

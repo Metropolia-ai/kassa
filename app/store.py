@@ -43,6 +43,10 @@ CREATE TABLE IF NOT EXISTS audit (
   tool TEXT NOT NULL,
   input TEXT, output TEXT, reason TEXT, ok INTEGER NOT NULL
 );
+CREATE TABLE IF NOT EXISTS ledger (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  ts TEXT NOT NULL, amount REAL NOT NULL, currency TEXT NOT NULL
+);
 CREATE TABLE IF NOT EXISTS settings (
   key TEXT PRIMARY KEY, value TEXT NOT NULL
 );
@@ -204,6 +208,16 @@ class Store:
         with self._lock:
             self.db.execute("INSERT INTO audit (ts, actor, tool, input, output, reason, ok) VALUES (?,?,?,?,?,?,?)",
                             (now(), actor, tool, _dump(input), _dump(output), reason, 1 if ok else 0))
+
+    def add_ledger(self, amount: float, currency: str) -> None:
+        """Money that left the PayPal account through Kassa. Survives demo resets on purpose."""
+        with self._lock:
+            self.db.execute("INSERT INTO ledger (ts, amount, currency) VALUES (?,?,?)", (now(), amount, currency))
+
+    def sent_since(self, ts: str, currency: str) -> float:
+        row = self.db.execute("SELECT COALESCE(SUM(amount), 0) AS s FROM ledger WHERE ts > ? AND currency = ?",
+                              (ts, currency)).fetchone()
+        return float(row["s"] or 0)
 
     def list_audit(self, limit: int = 200) -> list[dict]:
         return [dict(r) for r in self.db.execute("SELECT * FROM audit ORDER BY id DESC LIMIT ?", (limit,)).fetchall()]

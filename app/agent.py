@@ -137,22 +137,32 @@ class Kassa:
         except PayPalError as e:
             msg = str(e)[:500]
             if isinstance(e.body, dict) and e.body.get("name") == "INSUFFICIENT_FUNDS":
-                bal = self.paypal.get_balance(bill.get("currency") or self.currency)
-                have = f"{bal:.2f}" if bal is not None else "less"
+                bal = self.balance(bill.get("currency") or self.currency)
+                have = f"{bal['value']:.2f}" if bal else "less"
                 msg = (f"the PayPal sandbox account has {have} {bill.get('currency') or self.currency}, "
                        f"this bill needs {bill['amount']:.2f}; the demo account needs a top-up")
             self.store.update_bill(bill_id, status="failed", reason=msg)
             self.store.audit(actor, "pay_bill", {"bill_id": bill_id, "amount": bill["amount"]}, e.body, reason, False)
             raise PayPalError(e.status, {**e.body, "message": msg} if isinstance(e.body, dict) else e.body) from e
         batch = res["batch_header"]["payout_batch_id"]
+        self.store.add_ledger(bill["amount"], bill.get("currency") or self.currency)
         self.store.update_bill(bill_id, status="sent", payout_batch_id=batch,
                                payout_status=res["batch_header"].get("batch_status"))
         self.store.audit(actor, "pay_bill", {"bill_id": bill_id, "amount": bill["amount"], "to": bill["supplier_email"]},
                          {"payout_batch_id": batch, "batch_status": res["batch_header"].get("batch_status")}, reason, True)
         return self.store.get_bill(bill_id)
 
-    def balance(self) -> float | None:
-        return self.paypal.get_balance(self.currency) if self.paypal else None
+    def balance(self, currency: str | None = None) -> dict | None:
+        """PayPal's last balance snapshot minus what Kassa sent after it (PayPal's figure lags ~1 h)."""
+        if not self.paypal:
+            return None
+        cur = currency or self.currency
+        snap = self.paypal.get_balance(cur)
+        if not snap:
+            return None
+        as_of = snap["as_of"].replace("Z", "+00:00")  # same shape as store timestamps, so text compare works
+        sent = self.store.sent_since(as_of, cur) if as_of else 0.0
+        return {"value": round(snap["value"] - sent, 2), "as_of": snap["as_of"], "sent_since": round(sent, 2)}
 
     def pay_all_approved(self, actor: str = "agent") -> list[dict]:
         out = []
