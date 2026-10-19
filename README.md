@@ -34,6 +34,24 @@ The hosted demo is gated: the page asks for an access key once and stores it in 
 4. **Load sample invoices** sends three customer invoices through PayPal Invoicing, or use **New invoice** or chat: `invoice Acme acme@example.com 1500 EUR for the pilot`. Open the link to see the PayPal payment page.
 5. Audit log shows each step and the one refusal (agent tried to pay an unapproved bill).
 
+## Kassa × Kassa: two companies' agents settle with each other
+
+The same app has a second mode. Two companies run in one deployment, each with its own Kassa, PayPal
+account and books. The supplier's agent issues a real PayPal invoice, the buyer's agent checks it against
+its purchase order, they argue the difference within the limits their owners set, the buyer pays by
+Payout and the supplier records the payment on the invoice. When the gap is bigger than an owner allowed,
+that owner gets a card with both agents' summaries and decides in one click; the agents finish the paperwork.
+
+Policy decides, the model only writes the words: `app/duet.py` works out which action each owner's policy
+allows, the language model phrases the message. Without a model key the agents speak in plain templates.
+
+Three scenarios live in `samples/duet/scenarios.json`: extra hours ordered in writing (settled by the agents
+alone), a second scene agreed only in a call (the owners decide), the same work invoiced twice under a new
+number (refused and withdrawn, nobody looks).
+
+Run it locally with `DUET=1` and two companies in the environment (see `.env.example`, prefixes `CO_A_`
+and `CO_B_`), then open `/`. The single-company dashboard stays at `/solo`. Routes are under `/api/duet/`.
+
 ## Stack
 Python 3.12 · FastAPI · SQLite locally, Postgres (Neon) on Vercel · httpx · LLM with function calling via OpenRouter/OpenAI-compatible API or Anthropic · AG Grid Community for the three tables · PayPal REST (OAuth2, Payouts v1, Invoicing v2).
 
