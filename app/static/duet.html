@@ -1,0 +1,446 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Kassa × Kassa: two companies' bookkeepers settle an invoice on PayPal</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Schibsted+Grotesk:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+<style>
+  :root, [data-theme="light"] {
+    --ledger:#E3EAE0; --sheet:#F0F4EE; --paper:#FAFBF8; --rule:#C9D4C6; --hover:#E6EDE3;
+    --ink:#1B2A3F; --pencil:#56645E; --paid:#1F6B45; --red:#B42318; --held:#855700;
+    --scam-bg:#F6E1DD; --check-bg:#F6ECD6; --on-accent:#FFFFFF; --shade:rgba(27,42,63,.45);
+    --a:#1B2A3F; --b:#5B3A8C;            /* buyer ink, supplier ink */
+    --a-bg:#E6EBF3; --b-bg:#ECE4F5;
+    color-scheme:light;
+    --font:'Schibsted Grotesk', system-ui, sans-serif;
+    --mono:ui-monospace, 'SF Mono', Menlo, Consolas, 'Liberation Mono', monospace;
+  }
+  [data-theme="dark"] {
+    --ledger:#17181B; --sheet:#1E2023; --paper:#25272B; --rule:#35383D; --hover:#27292D;
+    --ink:#E7E8EA; --pencil:#A0A4AA; --paid:#5FC28B; --red:#F07D72; --held:#E3B65E;
+    --scam-bg:#3A2321; --check-bg:#332A1B; --on-accent:#121315; --shade:rgba(0,0,0,.6);
+    --a:#9DB4DC; --b:#C7A9F0; --a-bg:#22293A; --b-bg:#2B2438;
+    color-scheme:dark;
+  }
+  * { box-sizing:border-box; }
+  html { background:var(--ledger); }
+  body { margin:0; font:15px/1.5 var(--font); color:var(--ink); background:var(--ledger); }
+  a { color:var(--ink); text-underline-offset:3px; }
+  button, input { font:inherit; color:inherit; }
+  :focus-visible { outline:2px solid var(--ink); outline-offset:2px; }
+  main { max-width:1380px; margin:0 auto; padding:26px 36px 70px; }
+
+  .top { display:flex; align-items:baseline; gap:16px; flex-wrap:wrap; row-gap:6px; margin-bottom:6px; }
+  .brand { font-weight:800; font-size:22px; letter-spacing:-.01em; }
+  .brand .x { color:var(--pencil); font-weight:500; margin:0 6px; }
+  .who { color:var(--pencil); font-size:13px; }
+  .top .spacer { flex:1; }
+  .linkbtn { background:none; border:0; padding:0; color:var(--pencil); text-decoration:underline; text-underline-offset:3px; cursor:pointer; font-size:13px; }
+  .lead { margin:0 0 22px; max-width:78ch; color:var(--pencil); }
+
+  .btn { border:1px solid var(--ink); background:transparent; border-radius:6px; padding:8px 14px; cursor:pointer; font-weight:600; font-size:14px; }
+  .btn.solid { background:var(--ink); color:var(--sheet); }
+  .btn.green { border-color:var(--paid); color:var(--paid); }
+  .btn.green.solid { background:var(--paid); color:var(--on-accent); border-color:var(--paid); }
+  .btn.red { border-color:var(--red); color:var(--red); }
+  .btn.quiet { border-color:var(--rule); color:var(--pencil); font-weight:500; }
+  .btn.sm { padding:4px 10px; font-size:13px; }
+  .btn:disabled { opacity:.45; cursor:default; }
+  .btn:not(:disabled):hover { box-shadow:inset 0 0 0 1px currentColor; }
+
+  /* ---------- scenarios ---------- */
+  h2 { font-size:17px; margin:0 0 10px; font-weight:700; letter-spacing:-.01em; }
+  .scenarios { display:grid; grid-template-columns:repeat(3, minmax(0,1fr)); gap:12px; margin-bottom:26px; }
+  .sc { text-align:left; background:var(--sheet); border:1px solid var(--rule); border-radius:8px; padding:14px 16px; cursor:pointer; display:flex; flex-direction:column; gap:6px; }
+  .sc:hover { background:var(--hover); }
+  .sc.on { border-color:var(--ink); box-shadow:inset 0 0 0 1px var(--ink); }
+  .sc b { font-size:15px; }
+  .sc p { margin:0; font-size:13px; color:var(--pencil); }
+  .sc .exp { margin-top:auto; font-size:12px; font-weight:600; }
+  .sc .exp.alone { color:var(--paid); } .sc .exp.owners { color:var(--held); } .sc .exp.auto { color:var(--pencil); }
+
+  /* ---------- stage ---------- */
+  .stage { display:grid; grid-template-columns:270px minmax(0,1fr) 270px; gap:18px; align-items:start; }
+  .co { background:var(--sheet); border:1px solid var(--rule); border-radius:8px; padding:16px; position:sticky; top:16px; }
+  .co.a { border-top:4px solid var(--a); } .co.b { border-top:4px solid var(--b); }
+  .co h3 { margin:0; font-size:18px; }
+  .co .role { font-size:12px; text-transform:uppercase; letter-spacing:.08em; color:var(--pencil); font-weight:700; }
+  .co .meta { font-size:13px; color:var(--pencil); margin:6px 0 12px; line-height:1.55; word-break:break-all; }
+  .co .meta b { color:var(--ink); font-weight:600; }
+  .knobs { display:flex; flex-direction:column; gap:8px; border-top:1px solid var(--rule); padding-top:12px; }
+  .knobs .t { font-size:12px; text-transform:uppercase; letter-spacing:.08em; color:var(--pencil); font-weight:700; }
+  .knob { display:flex; align-items:center; gap:8px; font-size:13px; }
+  .knob label { flex:1; color:var(--pencil); }
+  .knob input { width:70px; border:1px solid var(--rule); background:var(--paper); border-radius:6px; padding:3px 6px; text-align:right; font-size:13px; color:var(--ink); }
+  .knob .u { width:28px; color:var(--pencil); font-size:12px; }
+  .knobs .save { align-self:flex-end; }
+  .knobs .save[hidden] { display:none; }
+
+  /* needs you card inside a company */
+  .card { margin-top:14px; border:2px solid var(--held); background:var(--check-bg); border-radius:8px; padding:12px 14px; }
+  .card .t { font-weight:800; font-size:14px; margin-bottom:4px; }
+  .card .why { font-size:13px; margin-bottom:10px; }
+  .card .opts { display:flex; flex-direction:column; gap:6px; }
+  .card .opts button { text-align:left; }
+  .card .custom { display:flex; gap:6px; }
+  .card .custom input { flex:1; min-width:0; border:1px solid var(--rule); background:var(--paper); border-radius:6px; padding:5px 8px; }
+
+  /* the wire */
+  .wire { background:var(--sheet); border:1px solid var(--rule); border-radius:8px; min-height:520px; display:flex; flex-direction:column; }
+  .wire .bar { display:flex; gap:10px; align-items:center; padding:12px 16px; border-bottom:1px solid var(--rule); flex-wrap:wrap; }
+  .wire .bar .t { font-weight:700; }
+  .wire .bar .spacer { flex:1; }
+  .chips { display:flex; gap:6px; flex-wrap:wrap; }
+  .chip { border:1px solid var(--rule); background:var(--ledger); border-radius:999px; padding:3px 10px; font-size:12px; cursor:pointer; color:var(--ink); }
+  .chip.on { border-color:var(--ink); font-weight:600; }
+  .feed { flex:1; padding:18px 18px 10px; display:flex; flex-direction:column; gap:14px; overflow:auto; }
+  .feed .empty { color:var(--pencil); margin:auto; text-align:center; max-width:46ch; }
+  .m { max-width:78%; display:flex; flex-direction:column; gap:4px; }
+  .m.a { align-self:flex-start; } .m.b { align-self:flex-end; align-items:flex-end; }
+  .m .from { font-size:12px; color:var(--pencil); display:flex; gap:8px; align-items:center; }
+  .m.b .from { flex-direction:row-reverse; }
+  .m .from b { color:var(--ink); }
+  .m .bubble { padding:10px 14px; border-radius:12px; font-size:14px; white-space:pre-wrap; word-break:break-word; }
+  .m.a .bubble { background:var(--a-bg); border-bottom-left-radius:3px; border-left:3px solid var(--a); }
+  .m.b .bubble { background:var(--b-bg); border-bottom-right-radius:3px; border-right:3px solid var(--b); }
+  .m.human .bubble { background:var(--paper); border:1px dashed var(--held); }
+  .m .pp { font-family:var(--mono); font-size:11.5px; color:var(--pencil); display:flex; gap:10px; flex-wrap:wrap; }
+  .m.b .pp { justify-content:flex-end; }
+  .m .pp span { background:var(--paper); border:1px solid var(--rule); border-radius:4px; padding:1px 6px; }
+  .sys { align-self:center; text-align:center; color:var(--pencil); font-size:13px; max-width:70ch; }
+  .sys.error { color:var(--red); }
+  .outcome { align-self:center; text-align:center; margin:8px 0 4px; }
+  .outcome .line { font-size:13px; color:var(--pencil); margin-top:6px; }
+  .thinking { align-self:flex-start; color:var(--pencil); font-size:13px; display:flex; gap:8px; align-items:center; }
+  .thinking.b { align-self:flex-end; }
+  .dots span { display:inline-block; width:6px; height:6px; border-radius:50%; background:var(--paid); margin-right:4px; animation:blink 1.2s infinite; }
+  .dots span:nth-child(2) { animation-delay:.2s; } .dots span:nth-child(3) { animation-delay:.4s; }
+  @keyframes blink { 0%,80%,100% { opacity:.2; } 40% { opacity:1; } }
+
+  /* stamps */
+  .stamp { display:inline-block; font-weight:800; font-size:10.5px; letter-spacing:.09em; text-transform:uppercase; padding:2px 7px 1px; border:2px solid currentColor; border-radius:3px; transform:rotate(-3deg); line-height:1.35; white-space:nowrap; }
+  .stamp.big { font-size:13px; padding:4px 10px 3px; }
+  .stamp.invoice, .stamp.reissue { color:var(--ink); border-style:dashed; }
+  .stamp.query, .stamp.counter, .stamp.propose { color:var(--held); }
+  .stamp.explain { color:var(--pencil); }
+  .stamp.accept, .stamp.paid, .stamp.settled { color:var(--paid); }
+  .stamp.settled, .stamp.paid { background:color-mix(in srgb, var(--paid) 10%, transparent); }
+  .stamp.escalate { color:var(--on-accent); background:var(--held); border-color:var(--held); transform:rotate(2deg); }
+  .stamp.reject, .stamp.withdraw, .stamp.decline, .stamp.failed { color:var(--red); }
+  @keyframes thunk { 0% { transform:scale(1.6) rotate(-8deg); opacity:0; } 60% { transform:scale(.95) rotate(-3deg); opacity:1; } 100% { transform:scale(1) rotate(-3deg); } }
+  .stamp.fresh { animation:thunk .35s ease-out; }
+
+  /* ---------- books ---------- */
+  .books { display:grid; grid-template-columns:1fr 1fr; gap:18px; margin-top:26px; }
+  .book { background:var(--sheet); border:1px solid var(--rule); border-radius:8px; padding:14px 16px; }
+  .book h2 { display:flex; gap:8px; align-items:baseline; }
+  .book h2 small { color:var(--pencil); font-weight:500; font-size:13px; }
+  table { width:100%; border-collapse:collapse; font-size:13.5px; }
+  th { text-align:left; color:var(--pencil); font-weight:600; padding:4px 8px 6px 0; border-bottom:1px solid var(--rule); }
+  td { padding:7px 8px 7px 0; border-bottom:1px solid var(--rule); vertical-align:top; }
+  td.num, th.num { text-align:right; white-space:nowrap; font-weight:600; }
+  td.why { color:var(--pencil); }
+  .none { color:var(--pencil); font-size:13.5px; margin:6px 0; }
+
+  /* ---------- status, toasts, dialogs ---------- */
+  .status { position:fixed; left:50%; top:14px; transform:translateX(-50%); background:var(--ink); color:var(--sheet); padding:8px 16px; border-radius:999px; font-size:14px; display:none; align-items:center; gap:10px; z-index:40; box-shadow:0 6px 24px var(--shade); }
+  .status.on { display:flex; }
+  .status::before { content:''; width:12px; height:12px; border:2px solid var(--sheet); border-top-color:transparent; border-radius:50%; animation:spin .8s linear infinite; }
+  @keyframes spin { to { transform:rotate(360deg); } }
+  .toast { position:fixed; left:24px; bottom:24px; background:var(--sheet); border:1px solid var(--rule); border-left:4px solid var(--paid); padding:12px 16px; border-radius:6px; max-width:440px; font-size:14px; z-index:50; box-shadow:0 8px 28px var(--shade); }
+  .toast.bad { border-left-color:var(--red); }
+  dialog { border:1px solid var(--rule); border-radius:8px; padding:0; background:var(--sheet); color:var(--ink); max-width:min(720px, 92vw); width:100%; }
+  dialog::backdrop { background:var(--shade); }
+  .dlg { padding:22px 26px; }
+  .dlg h3 { margin:0 0 12px; font-size:20px; display:flex; gap:12px; align-items:center; }
+  .dlg h3 .x { margin-left:auto; }
+  .howto p { margin:0 0 12px; max-width:68ch; }
+  .howto ol { margin:0 0 14px; padding-left:22px; display:flex; flex-direction:column; gap:8px; max-width:68ch; }
+  .howto .fine { color:var(--pencil); font-size:14px; }
+  .gate { max-width:400px; }
+  .gate p { color:var(--pencil); font-size:14px; margin:0 0 14px; }
+  .gate input { width:100%; border:1px solid var(--rule); border-radius:6px; padding:10px 12px; background:var(--paper); margin-bottom:6px; }
+  .gate .err { color:var(--red); font-size:13px; min-height:18px; margin-bottom:8px; }
+
+  @media (max-width:1100px) {
+    .stage { grid-template-columns:1fr; }
+    .co { position:static; }
+    .scenarios, .books { grid-template-columns:1fr; }
+    main { padding:20px 16px 50px; }
+    .m { max-width:92%; }
+  }
+  @media (prefers-reduced-motion:reduce) { *, *::before { animation:none !important; transition:none !important; } }
+</style>
+</head>
+<body>
+<div class="status" id="status" role="status" aria-live="polite"></div>
+
+<dialog id="gate"><form class="dlg gate" id="gate-form" method="dialog">
+  <h3>Kassa × Kassa demo</h3>
+  <p>This demo runs a real language model and two PayPal sandbox accounts. Enter the access key you were given. It stays in this browser.</p>
+  <input id="gate-key" type="password" placeholder="Access key" autocomplete="current-password" required>
+  <div class="err" id="gate-err"></div>
+  <button class="btn solid" type="submit">Open the demo</button>
+</form></dialog>
+
+<dialog id="howto" aria-labelledby="howto-h"><div class="dlg howto">
+  <h3 id="howto-h">What you are looking at<button class="btn quiet x" id="howto-close">Close</button></h3>
+  <p>Two small companies. Each runs <b>Kassa</b>, an AI bookkeeper with its own PayPal account. <b>Pixelforge Oy</b> does render work for <b>Frappua</b>. When Pixelforge's bookkeeper sends an invoice, Frappua's bookkeeper checks it against the purchase order, and the two settle the difference between themselves on PayPal: invoice, query, answer, payout, receipt.</p>
+  <p>Each owner sets how far its agent may go alone. Inside those limits nobody is interrupted. Beyond them, the owner gets a card with both agents' summaries and decides in one click. The agents then finish the paperwork.</p>
+  <ol>
+    <li><b>Pick a scenario.</b> The first one settles without a person. The second stops at the owners' limits and asks you. The third is a duplicate invoice: refused and withdrawn, nobody looks.</li>
+    <li><b>Watch the wire.</b> Every message is written by the model, but every decision is made by the owner's policy: the amounts, what may be accepted, when to ask.</li>
+    <li><b>Change the limits</b> on either side and run the same scenario again. A looser tolerance means fewer questions; a higher floor means more escalations.</li>
+    <li><b>Check PayPal.</b> Invoice ids, payout batch ids and statuses under each message are real sandbox objects.</li>
+  </ol>
+  <p class="fine">Everything runs in the PayPal sandbox: no real money moves. "Start over" clears the demo data on both sides.</p>
+  <button class="btn solid" id="howto-go">Run the first scenario</button>
+</div></dialog>
+
+<main>
+  <div class="top">
+    <div class="brand">Kassa<span class="x">×</span>Kassa</div>
+    <div class="who" id="who"></div>
+    <div class="spacer"></div>
+    <button class="linkbtn" id="howto-open" type="button">What is this</button>
+    <button class="linkbtn" id="theme" type="button"></button>
+    <button class="linkbtn" id="lock" title="Forget the access key in this browser">Lock</button>
+  </div>
+  <p class="lead">Two companies, two AI bookkeepers, one invoice. They check it, argue the difference and settle it on PayPal by themselves. A person is asked only when the gap is bigger than that person allowed.</p>
+
+  <h2>Pick a scenario</h2>
+  <div class="scenarios" id="scenarios"></div>
+
+  <div class="stage">
+    <section class="co a" id="co-a" aria-live="polite"></section>
+
+    <section class="wire" aria-label="Messages between the two agents">
+      <div class="bar">
+        <span class="t" id="wire-title">The wire</span>
+        <div class="chips" id="chips"></div>
+        <span class="spacer"></span>
+        <button class="btn sm quiet" id="btn-step" disabled>One step</button>
+        <button class="btn sm solid" id="btn-play" disabled>Play</button>
+        <button class="btn sm quiet" id="btn-reset">Start over</button>
+      </div>
+      <div class="feed" id="feed"><div class="empty">Pick a scenario above. Pixelforge's bookkeeper will send an invoice and Frappua's will answer; every step shows up here.</div></div>
+    </section>
+
+    <section class="co b" id="co-b" aria-live="polite"></section>
+  </div>
+
+  <div class="books">
+    <div class="book"><h2 id="book-a-h">Frappua's books <small>bills to pay</small></h2><div id="book-a"></div></div>
+    <div class="book"><h2 id="book-b-h">Pixelforge's books <small>invoices issued</small></h2><div id="book-b"></div></div>
+  </div>
+</main>
+
+<script>
+const KEY_NAME = 'kassa_access_key', THEME_KEY = 'kassa_theme', HOWTO_KEY = 'kassa_duet_howto';
+const getKey = () => localStorage.getItem(KEY_NAME) || '';
+const $ = id => document.getElementById(id);
+const esc = s => String(s ?? '').replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+const money = (v, c) => v == null ? '' : new Intl.NumberFormat('en-IE', {style:'currency', currency:c || 'EUR'}).format(v);
+
+async function api(path, opts = {}) {
+  const r = await fetch('/api' + path, {...opts, headers:{'Content-Type':'application/json', 'X-Kassa-Key': getKey(), ...(opts.headers || {})}});
+  const j = await r.json().catch(() => ({}));
+  if (r.status === 401) { askKey('That key did not work. Check it and try again.'); throw new Error('Access key required.'); }
+  if (!r.ok) throw new Error((j.body && j.body.message) || j.error || (j.detail && (j.detail.message || j.detail)) || 'The server returned ' + r.status + '.');
+  return j;
+}
+function askKey(msg) { $('gate-err').textContent = msg || ''; $('gate-key').value = ''; if (!$('gate').open) $('gate').showModal(); setTimeout(() => $('gate-key').focus(), 30); }
+$('gate-form').addEventListener('submit', async e => {
+  e.preventDefault(); const k = $('gate-key').value.trim(); if (!k) return;
+  localStorage.setItem(KEY_NAME, k);
+  try { await load(); $('gate').close(); if (!localStorage.getItem(HOWTO_KEY)) openHowto(); } catch (err) { localStorage.removeItem(KEY_NAME); }
+});
+$('gate').addEventListener('cancel', e => e.preventDefault());
+$('lock').onclick = () => { localStorage.removeItem(KEY_NAME); askKey(''); };
+
+function applyTheme(t) { document.documentElement.dataset.theme = t; $('theme').textContent = t === 'dark' ? 'Light theme' : 'Dark theme'; }
+applyTheme(localStorage.getItem(THEME_KEY) || (matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light'));
+$('theme').onclick = () => { const t = document.documentElement.dataset.theme === 'dark' ? 'light' : 'dark'; localStorage.setItem(THEME_KEY, t); applyTheme(t); };
+
+function openHowto() { if (!$('howto').open) $('howto').showModal(); }
+$('howto-open').onclick = openHowto;
+$('howto-close').onclick = () => $('howto').close();
+$('howto').addEventListener('close', () => localStorage.setItem(HOWTO_KEY, '1'));
+$('howto-go').onclick = () => { $('howto').close(); const first = document.querySelector('.sc'); if (first) first.click(); };
+
+function working(text) { const s = $('status'); if (text) { s.textContent = text; s.classList.add('on'); } else { s.classList.remove('on'); } }
+function toast(text, bad) { const t = document.createElement('div'); t.className = 'toast' + (bad ? ' bad' : ''); t.setAttribute('role', 'status'); t.textContent = text; document.body.appendChild(t); setTimeout(() => t.remove(), bad ? 8000 : 4500); }
+
+/* ---------- state ---------- */
+let STATE = null, CUR = null, PLAYING = false, STEPPING = false;
+const seenStamps = new Set();
+const byKey = k => (STATE.companies || []).find(c => c.key === k) || {name:k};
+const side = k => k === STATE.buyer ? 'a' : 'b';
+
+async function load() {
+  STATE = await api('/duet/state');
+  $('who').textContent = `PayPal ${STATE.env}, two business accounts`;
+  renderScenarios(); renderCompanies(); renderChips();
+  if (CUR) { const t = STATE.threads.find(t => t.id === CUR.id); if (t) CUR = t; }
+  else if (STATE.threads.length) CUR = STATE.threads[STATE.threads.length - 1];
+  renderFeed(); renderBooks();
+}
+
+/* ---------- scenarios ---------- */
+const EXPECT = {'settled by the agents alone':'alone', 'the owners decide':'owners', 'refused and withdrawn by the agents':'auto'};
+function renderScenarios() {
+  $('scenarios').innerHTML = STATE.scenarios.map(s => `
+    <button class="sc${CUR && CUR.scenario === s.key ? ' on' : ''}" data-key="${esc(s.key)}">
+      <b>${esc(s.title)}</b><p>${esc(s.summary)}</p>
+      <span class="exp ${EXPECT[s.expect] || 'auto'}">Expected: ${esc(s.expect)}</span>
+    </button>`).join('');
+}
+$('scenarios').onclick = async e => {
+  const b = e.target.closest('.sc'); if (!b || STEPPING) return;
+  PLAYING = false;
+  try { working('Setting the scene…'); CUR = await api(`/duet/scenario/${b.dataset.key}`, {method:'POST'}); await load(); play(); }
+  catch (err) { toast(err.message, true); } finally { working(null); }
+};
+
+/* ---------- companies ---------- */
+const KNOBS = {
+  buyer: [['tolerance_pct', 'Accept over the order up to', '%'], ['tolerance_abs', 'but never more than', 'EUR'], ['documented_pct', 'If the extra was ordered in writing, up to', '%'], ['auto_pay_limit', 'Pay on its own up to', 'EUR']],
+  supplier: [['concession_pct', 'May give a discount up to', '%'], ['floor_pct', 'Never below this share of the invoice', '%']],
+};
+function renderCompanies() {
+  for (const c of STATE.companies) {
+    const el = $(c.role === 'buyer' ? 'co-a' : 'co-b');
+    const focused = document.activeElement && el.contains(document.activeElement);
+    if (focused) continue;  // the owner is typing a limit, leave the card alone
+    const card = pendingCard(c);
+    el.innerHTML = `
+      <div class="role">${c.role === 'buyer' ? 'Buyer' : 'Supplier'}</div>
+      <h3>${esc(c.name)}</h3>
+      <div class="meta">Owner <b>${esc(c.owner)}</b><br>PayPal ${esc(c.email)}<br>${c.balance != null ? 'Balance <b>' + money(c.balance, c.currency) + '</b>' : c.paypal ? 'Balance unknown' : 'PayPal not connected'}</div>
+      <form class="knobs" data-co="${esc(c.key)}"><div class="t">What the agent may do alone</div>
+        ${KNOBS[c.role].map(([k, label, u]) => `<div class="knob"><label for="k-${c.key}-${k}">${label}</label><input id="k-${c.key}-${k}" name="${k}" type="number" min="0" step="${u === '%' ? 1 : 10}" value="${c.policy[k]}"><span class="u">${u}</span></div>`).join('')}
+        <button class="btn sm quiet save" type="submit" hidden>Save</button>
+      </form>
+      ${card}`;
+    const form = el.querySelector('form');
+    form.addEventListener('input', () => { form.querySelector('.save').hidden = false; });
+    form.onsubmit = async ev => { ev.preventDefault(); const values = {}; new FormData(form).forEach((v, k) => values[k] = Number(v));
+      try { working('Saving…'); await api(`/duet/policy/${c.key}`, {method:'PUT', body:JSON.stringify({values})}); toast(`${c.name}'s agent has new limits. They apply from the next scenario.`); form.querySelector('.save').hidden = true; await load(); }
+      catch (err) { toast(err.message, true); } finally { working(null); } };
+  }
+}
+function pendingCard(c) {
+  if (!CUR || CUR.status !== 'needs_humans' || !CUR.decisions.length || CUR.decisions[0].company !== c.key) return '';
+  const d = CUR.decisions[0];
+  return `<div class="card" role="group" aria-label="Decision for ${esc(c.owner)}">
+    <div class="t">${esc(c.owner)}, your agent needs you</div>
+    <div class="why">${esc(d.why)}</div>
+    <div class="opts">${d.options.map((o, i) => o.custom
+      ? `<div class="custom"><input type="number" step="10" min="0" placeholder="Amount, ${esc(CUR.currency)}" id="custom-${c.key}"><button class="btn sm" data-decide="${i}" data-custom="1">Offer</button></div>`
+      : `<button class="btn sm ${o.key === 'reject' || o.key === 'decline' ? 'red' : 'solid'}" data-decide="${i}">${esc(o.label)}</button>`).join('')}</div>
+  </div>`;
+}
+document.addEventListener('click', async e => {
+  const b = e.target.closest('button[data-decide]'); if (!b || !CUR) return;
+  const d = CUR.decisions[0], o = d.options[Number(b.dataset.decide)];
+  let amount = o.amount;
+  if (b.dataset.custom) { amount = Number($('custom-' + d.company).value); if (!amount) { toast('Enter an amount first.', true); return; } }
+  try { working('Telling the agents…'); CUR = await api(`/duet/threads/${CUR.id}/decide`, {method:'POST', body:JSON.stringify({company:d.company, choice:o.key, amount})}); await load(); play(); }
+  catch (err) { toast(err.message, true); } finally { working(null); }
+});
+
+/* ---------- threads and the feed ---------- */
+function renderChips() {
+  $('chips').innerHTML = STATE.threads.slice(-6).map(t => `<button class="chip${CUR && CUR.id === t.id ? ' on' : ''}" data-id="${t.id}" title="${esc(t.title)}">#${t.id} ${esc(shortTitle(t))}</button>`).join('');
+}
+const shortTitle = t => ({'extra-hours':'Extra hours', 'scope-doubled':'Second scene', 'duplicate':'Duplicate'}[t.scenario] || t.scenario);
+$('chips').onclick = e => { const c = e.target.closest('.chip'); if (!c) return; PLAYING = false; CUR = STATE.threads.find(t => t.id === Number(c.dataset.id)); renderChips(); renderScenarios(); renderCompanies(); renderFeed(); };
+
+const ACTION_LABEL = {invoice:'Invoice', query:'Query', explain:'Explained', counter:'Counter', accept:'Agreed', escalate:'Asks the owner', reject:'Refused', reissue:'Reissued', paid:'Paid', settled:'Receipt', withdraw:'Withdrawn', propose:'Owner offers', decline:'Owner declines'};
+function stamp(action, key, big) { const fresh = key && !seenStamps.has(key); if (key) seenStamps.add(key); return `<span class="stamp ${esc(action)}${big ? ' big' : ''}${fresh ? ' fresh' : ''}">${esc(ACTION_LABEL[action] || action)}</span>`; }
+function ppLine(m) {
+  const d = m.data || {}, bits = [];
+  if (d.paypal_invoice_id) bits.push(`PayPal invoice ${d.paypal_invoice_id}${d.paypal_status ? ' · ' + d.paypal_status : ''}`);
+  if (d.payout_batch_id) bits.push(`Payout ${d.payout_batch_id}${d.payout_status ? ' · ' + d.payout_status : ''}`);
+  if (d.invoice_status && !d.paypal_invoice_id) bits.push(`Invoice ${d.invoice_status}`);
+  if (d.payout_status && !d.payout_batch_id) bits.push(`Payout ${d.payout_status}`);
+  if (d.cancel_error) bits.push('Cancel failed: ' + d.cancel_error);
+  return bits.length ? `<div class="pp">${bits.map(b => `<span>${esc(b)}</span>`).join('')}</div>` : '';
+}
+function renderFeed() {
+  const f = $('feed');
+  $('btn-step').disabled = $('btn-play').disabled = !CUR || isFinal(CUR) || CUR.status === 'needs_humans';
+  $('btn-play').textContent = PLAYING ? 'Pause' : 'Play';
+  if (!CUR) { f.innerHTML = '<div class="empty">Pick a scenario above. Pixelforge\'s bookkeeper will send an invoice and Frappua\'s will answer; every step shows up here.</div>'; $('wire-title').textContent = 'The wire'; return; }
+  $('wire-title').textContent = CUR.title;
+  const t0 = CUR.messages.length ? new Date(CUR.messages[0].ts) : null;
+  let html = CUR.messages.map(m => {
+    if (m.company === 'system') return `<div class="sys${m.action === 'error' ? ' error' : ''}">${esc(m.text)}</div>`;
+    const c = byKey(m.company), s = side(m.company), human = m.author === 'human';
+    return `<div class="m ${s}${human ? ' human' : ''}">
+      <div class="from"><b>${esc(human ? c.owner + ', owner of ' + c.name : c.name + "'s agent")}</b>${stamp(m.action, 'm' + m.id)}<span>${new Date(m.ts).toLocaleTimeString('en-GB')}</span></div>
+      <div class="bubble">${esc(m.text)}</div>${ppLine(m)}</div>`;
+  }).join('');
+  if (isFinal(CUR)) {
+    const last = new Date(CUR.messages[CUR.messages.length - 1].ts), secs = t0 ? Math.round((last - t0) / 1000) : 0;
+    const humans = CUR.messages.filter(m => m.author === 'human').length, agents = CUR.messages.filter(m => m.author === 'agent').length;
+    const kind = CUR.status === 'failed' ? 'failed' : CUR.status === 'closed' ? 'withdraw' : 'settled';
+    html += `<div class="outcome">${stamp(kind, 'o' + CUR.id + CUR.status, true)}<div class="line">${esc(CUR.outcome || CUR.status)}. ${agents} agent messages, ${humans === 0 ? 'no person involved' : humans + (humans === 1 ? ' decision by a person' : ' decisions by people')}, ${secs} s on the wire.</div></div>`;
+  } else if (CUR.status === 'needs_humans') {
+    const w = byKey(CUR.waiting);
+    html += `<div class="sys">Waiting for ${esc(w.owner)} at ${esc(w.name)}. The card is on ${esc(w.name)}'s side.</div>`;
+  } else if (STEPPING || PLAYING) {
+    const who = byKey(CUR.turn);
+    html += `<div class="thinking ${side(CUR.turn)}"><span class="dots"><span></span><span></span><span></span></span>${esc(who.name)}'s agent is working</div>`;
+  }
+  f.innerHTML = html; f.scrollTop = f.scrollHeight;
+  // ACTION_LABEL for the outcome stamp
+}
+const isFinal = t => ['settled', 'closed', 'failed'].includes(t.status);
+ACTION_LABEL.settled = 'Settled'; ACTION_LABEL.failed = 'Failed';
+
+async function step() {
+  if (!CUR || STEPPING || isFinal(CUR) || CUR.status === 'needs_humans') return false;
+  STEPPING = true; renderFeed();
+  try { const t = await api(`/duet/threads/${CUR.id}/step`, {method:'POST'}); CUR = t; await load(); return t.changed; }
+  catch (err) { toast(err.message, true); PLAYING = false; return false; }
+  finally { STEPPING = false; renderFeed(); }
+}
+async function play() {
+  if (PLAYING) return; PLAYING = true; renderFeed();
+  while (PLAYING && CUR && !isFinal(CUR) && CUR.status !== 'needs_humans') {
+    const changed = await step();
+    if (!changed) break;
+    await new Promise(r => setTimeout(r, 900));
+  }
+  PLAYING = false; renderFeed();
+  if (CUR && CUR.status === 'needs_humans') { const w = byKey(CUR.waiting); toast(`${w.owner} at ${w.name}: your agent needs you. The card is on ${w.name}'s side.`); }
+}
+$('btn-step').onclick = () => { PLAYING = false; step(); };
+$('btn-play').onclick = () => { if (PLAYING) { PLAYING = false; renderFeed(); } else play(); };
+$('btn-reset').onclick = async () => { if (!confirm('Clear all demo data on both sides and start over?')) return;
+  PLAYING = false; try { working('Starting over…'); await api('/duet/reset', {method:'POST'}); CUR = null; seenStamps.clear(); await load(); toast('Cleared. Pick a scenario.'); } catch (err) { toast(err.message, true); } finally { working(null); } };
+
+/* ---------- books ---------- */
+const BILL_WORD = {paid:'Paid', sent:'Sent to PayPal', unclaimed:'Unclaimed', approved:'Approved', needs_approval:'Held', rejected:'Refused', failed:'Failed', paying:'Sending', extracted:'Read', received:'Read'};
+async function renderBooks() {
+  const a = byKey(STATE.buyer), b = byKey(STATE.supplier);
+  $('book-a-h').innerHTML = `${esc(a.name)}'s books <small>bills to pay</small>`; $('book-b-h').innerHTML = `${esc(b.name)}'s books <small>invoices issued</small>`;
+  const [bills, invs] = await Promise.all([api(`/duet/companies/${a.key}/bills`), api(`/duet/companies/${b.key}/invoices`)]);
+  $('book-a').innerHTML = bills.length ? `<table><tr><th>Invoice</th><th class="num">Amount</th><th>Status</th><th>Why</th></tr>${bills.map(x => `<tr><td>${esc(x.invoice_number || '')}</td><td class="num">${money(x.amount, x.currency)}</td><td>${esc(BILL_WORD[x.status] || x.status)}${x.payout_status ? '<br><small>' + esc(x.payout_status) + '</small>' : ''}</td><td class="why">${esc(x.reason || '')}</td></tr>`).join('')}</table>` : '<p class="none">No bills yet.</p>';
+  $('book-b').innerHTML = invs.length ? `<table><tr><th>Invoice</th><th class="num">Amount</th><th>PayPal status</th><th></th></tr>${invs.map(x => `<tr><td>${esc(x.invoice_number || '')}</td><td class="num">${money(x.amount, x.currency)}</td><td>${esc(x.status || '')}</td><td>${x.pay_url ? `<a href="${esc(x.pay_url)}" target="_blank" rel="noopener">Open</a>` : ''}</td></tr>`).join('')}</table>` : '<p class="none">No invoices yet.</p>';
+}
+
+/* ---------- boot ---------- */
+(async function boot() {
+  const h = await fetch('/api/health').then(r => r.json()).catch(() => ({gate:true}));
+  if (h.gate && !getKey()) { askKey(''); return; }
+  try { await load(); if (!localStorage.getItem(HOWTO_KEY) && location.hash !== '#no-guide') openHowto(); } catch (e) {}
+})();
+setInterval(() => { if (!$('gate').open && !STEPPING && !PLAYING) load().catch(() => {}); }, 20000);
+</script>
+</body>
+</html>

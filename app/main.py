@@ -36,6 +36,14 @@ def build_kassa() -> Kassa:
 app = FastAPI(title="Kassa", version="0.1")
 kassa = build_kassa()
 
+# Kassa x Kassa: two companies' agents settling with each other. Same app, DUET=1 adds the second mode.
+DUET = bool(os.environ.get("DUET"))
+duet = None
+if DUET:
+    from .duet_api import build_duet, make_router
+    duet = build_duet(os.environ.get("KASSA_DB", str(ROOT / "kassa.db")))
+    app.include_router(make_router(duet))
+
 # --- access gate ---------------------------------------------------------
 # Every /api/* call needs header X-Kassa-Key == ACCESS_KEY. The page itself is public, the API is not,
 # so nobody can spend the LLM key or touch the PayPal sandbox without the key.
@@ -141,6 +149,11 @@ async def val_err(_, e: ValueError):
 
 @app.get("/")
 def index():
+    return FileResponse(ROOT / "app" / "static" / ("duet.html" if DUET else "index.html"))
+
+
+@app.get("/solo")
+def index_solo():
     return FileResponse(ROOT / "app" / "static" / "index.html")
 
 
@@ -262,7 +275,10 @@ def create_invoice(body: InvoiceIn):
 # --- status, audit, chat ---------------------------------------------------
 @app.api_route("/api/refresh", methods=["GET", "POST"])
 def refresh():
-    return {"payouts": kassa.refresh_payouts(), "invoices": kassa.refresh_customer_invoices()}
+    out = {"payouts": kassa.refresh_payouts(), "invoices": kassa.refresh_customer_invoices()}
+    if duet:
+        out["duet"] = duet.refresh()
+    return out
 
 
 @app.get("/api/settings")

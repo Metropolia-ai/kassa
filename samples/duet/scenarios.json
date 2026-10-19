@@ -1,0 +1,45 @@
+[
+  {
+    "key": "extra-hours",
+    "title": "Extra hours, ordered in writing",
+    "summary": "Pixelforge bills 50 render hours; Frappua's order says 40. The agents sort it out between themselves: the extra 10 hours were ordered by e-mail by Frappua's own producer, and the overrun is inside the tolerance Frappua's owner set.",
+    "expect": "settled by the agents alone",
+    "po": {"number": "PO-7731", "date": "2026-10-03", "approved_by": "Alena Mima",
+           "items": [{"name": "GPU render hours", "qty": 40, "unit": 6.50},
+                     {"name": "Storage 2 TB, half month", "qty": 1, "unit": 12.00}]},
+    "invoice": {"number": "PF-2026-0418", "due_in_days": 14, "memo": "Render farm, first half of October",
+                "items": [{"name": "GPU render hours", "qty": 50, "unit": 6.50},
+                          {"name": "Storage 2 TB, half month", "qty": 1, "unit": 12.00}]},
+    "supplier_records": [
+      {"kind": "work_log", "data": {"hours": 50, "entries": [
+        {"date": "2026-10-06", "hours": 20, "what": "h", "note": "scene 1 render"},
+        {"date": "2026-10-09", "hours": 20, "what": "h", "note": "scene 2 render"},
+        {"date": "2026-10-12", "hours": 10, "what": "h", "note": "re-render after the model fix", "approved_by": "Alena Mima (Frappua), e-mail 12 Oct 09:41"}]}}
+    ]
+  },
+  {
+    "key": "scope-doubled",
+    "title": "Second scene, agreed only in a call",
+    "summary": "Pixelforge bills two animated scenes; the order covers one. Nothing in writing for the second. The agents get as far as their owners allow, then both owners get a card and decide in one click.",
+    "expect": "the owners decide",
+    "po": {"number": "PO-7740", "date": "2026-10-08", "approved_by": "Erik Sindonen",
+           "items": [{"name": "Character animation, per scene", "qty": 1, "unit": 1200.00}]},
+    "invoice": {"number": "PF-2026-0419", "due_in_days": 14, "memo": "Character animation, October",
+                "items": [{"name": "Character animation, per scene", "qty": 2, "unit": 1200.00}]},
+    "supplier_records": [
+      {"kind": "work_log", "data": {"entries": [
+        {"date": "2026-10-10", "qty": 1, "what": "scene", "note": "scene 1 delivered"},
+        {"date": "2026-10-16", "qty": 1, "what": "scene", "note": "scene 2 delivered; asked for in a call with Erik on 14 Oct, no written confirmation"}]}}
+    ]
+  },
+  {
+    "key": "duplicate",
+    "title": "The same invoice, sent twice",
+    "summary": "After a sync glitch Pixelforge's system raises the October render invoice a second time under a new number. Frappua's agent recognises the same work, same amount, already paid, and asks. Pixelforge's agent checks its own books and withdraws the PayPal invoice. Nobody is interrupted.",
+    "expect": "refused and withdrawn by the agents",
+    "seed_prior_bill": true,
+    "invoice": {"number": "PF-2026-0418", "due_in_days": 14, "memo": "Render farm, first half of October",
+                "items": [{"name": "GPU render hours", "qty": 50, "unit": 6.50},
+                          {"name": "Storage 2 TB, half month", "qty": 1, "unit": 12.00}]}
+  }
+]

@@ -98,9 +98,12 @@ class PayPalClient:
     # --- invoicing (we bill customers) ------------------------------------
     def create_invoice(self, *, merchant_email: str, merchant_name: str, recipient_email: str,
                        recipient_name: str | None, items: list[dict], currency: str,
-                       due_date: str | None, note: str | None, reference: str | None = None) -> dict:
+                       due_date: str | None, note: str | None, reference: str | None = None,
+                       invoice_number: str | None = None) -> dict:
         """items: [{name, quantity, unit_amount, description?}] amounts as strings."""
         detail: dict[str, Any] = {"currency_code": currency}
+        if invoice_number:
+            detail["invoice_number"] = invoice_number
         if note:
             detail["note"] = note
         if reference:
@@ -140,6 +143,22 @@ class PayPalClient:
 
     def get_invoice(self, invoice_id: str) -> dict:
         return self._request("GET", f"/v2/invoicing/invoices/{invoice_id}")
+
+    def cancel_invoice(self, invoice_id: str, note: str | None = None) -> dict:
+        body: dict[str, Any] = {"send_to_invoicer": False, "send_to_recipient": True}
+        if note:
+            body["note"] = note
+        return self._request("POST", f"/v2/invoicing/invoices/{invoice_id}/cancel", json=body) or {}
+
+    def record_invoice_payment(self, invoice_id: str, amount: str, currency: str, note: str | None = None,
+                               method: str = "PAYPAL") -> dict:
+        """Mark a sent invoice as paid outside the invoice's own checkout (e.g. the buyer paid by Payout)."""
+        from datetime import date as _date
+        body: dict[str, Any] = {"method": method, "payment_date": _date.today().isoformat(),
+                                "amount": {"currency_code": currency, "value": amount}}
+        if note:
+            body["note"] = note
+        return self._request("POST", f"/v2/invoicing/invoices/{invoice_id}/payments", json=body) or {}
 
     def list_invoices(self, page_size: int = 20) -> dict:
         return self._request("GET", "/v2/invoicing/invoices", params={"page_size": page_size, "total_required": "true"})

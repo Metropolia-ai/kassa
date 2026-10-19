@@ -20,13 +20,18 @@ from .store import Store
 
 class Kassa:
     def __init__(self, store: Store, paypal: PayPalClient | None, *, merchant_email: str, merchant_name: str,
-                 auto_pay_limit: float, currency: str = "EUR"):
+                 auto_pay_limit: float, currency: str = "EUR",
+                 opening_balance: float | None = None, opening_at: str | None = None):
         self.store = store
         self.paypal = paypal
         self.merchant_email = merchant_email
         self.merchant_name = merchant_name
         self._default_limit = auto_pay_limit
         self.currency = currency
+        # A known balance at a known time; see balance(). Falls back to the KASSA_OPENING_* env vars.
+        env_ob, env_at = os.environ.get("KASSA_OPENING_BALANCE"), os.environ.get("KASSA_OPENING_AT")
+        self.opening_balance = opening_balance if opening_balance is not None else (float(env_ob) if env_ob else None)
+        self.opening_at = opening_at or env_at
 
     # Stored in the database so every serverless instance sees the same value.
     @property
@@ -77,13 +82,28 @@ class Kassa:
                          (f"risk {level}: " + "; ".join(signals[:3]) + ". " if level != "low" else "") + (data.get("notes") or ""), True)
         return self.evaluate(bill_id, actor=actor)
 
+    def ingest_structured(self, source: str, text: str, fields: dict, actor: str = "agent") -> dict:
+        """Record a bill whose fields we already know (another agent handed them over). Policy still runs."""
+        bill_id = self.store.add_bill(source, text)
+        keep = {k: fields.get(k) for k in ("supplier", "supplier_email", "invoice_number", "invoice_date", "due_date",
+                                            "amount", "currency", "line_items")}
+        keep["confidence"] = fields.get("confidence", 1.0)
+        own = tuple(d.strip().lower() for d in os.environ.get("OWN_DOMAINS", "").split(",") if d.strip())
+        rule_sig = extract_mod.risk_rules(text, keep, self.merchant_name, own)
+        level, signals = extract_mod.combine_risk(fields.get("risk_level"), fields.get("risk_signals"), rule_sig)
+        keep["risk_level"], keep["risk_signals"] = level, signals
+        self.store.update_bill(bill_id, status="extracted", **keep)
+        self.store.audit(actor, "record_bill", {"bill_id": bill_id, "source": source}, keep, "handed over by the supplier's agent", True)
+        return self.evaluate(bill_id, actor=actor)
+
     def evaluate(self, bill_id: int, actor: str = "agent") -> dict:
         bill = self.store.get_bill(bill_id)
         if not bill:
             raise KeyError(bill_id)
         supplier = self.store.get_supplier(bill.get("supplier_email"))
         dup = self.store.find_duplicate(bill.get("supplier_email"), bill.get("invoice_number"), bill_id)
-        d = policy.evaluate(bill, auto_pay_limit=self.auto_pay_limit, supplier=supplier, duplicate=dup)
+        similar = None if dup else self.store.find_similar(bill.get("supplier_email"), bill.get("amount"), bill_id)
+        d = policy.evaluate(bill, auto_pay_limit=self.auto_pay_limit, supplier=supplier, duplicate=dup, similar=similar)
         self.store.update_bill(bill_id, status=d.status, reason=d.reason)
         if bill.get("supplier_email"):
             self.store.upsert_supplier(bill["supplier_email"], bill.get("supplier"))
@@ -162,10 +182,10 @@ class Kassa:
         if not self.paypal:
             return None
         cur = currency or self.currency
-        opening, opening_at = os.environ.get("KASSA_OPENING_BALANCE"), os.environ.get("KASSA_OPENING_AT")
-        if opening and opening_at:
+        opening, opening_at = self.opening_balance, self.opening_at
+        if opening is not None and opening_at:
             sent = self.store.sent_since(opening_at, cur)
-            value = round(float(opening) - sent, 2)
+            value = round(opening - sent, 2)
             as_of = opening_at
         else:
             snap = self.paypal.get_balance(cur)
@@ -212,14 +232,15 @@ class Kassa:
     # -------------------------------------------------------- customer billing
     def create_customer_invoice(self, *, customer_name: str, customer_email: str, items: list[dict],
                                 due_in_days: int = 14, memo: str | None = None, send: bool = True,
-                                actor: str = "agent", reason: str | None = None) -> dict:
+                                actor: str = "agent", reason: str | None = None, invoice_number: str | None = None) -> dict:
         if not self.paypal:
             raise RuntimeError("PayPal is not configured")
         due = (date.today() + timedelta(days=due_in_days)).isoformat()
         total = sum(float(i["unit_amount"]) * float(i.get("quantity", 1)) for i in items)
         inv = self.paypal.create_invoice(merchant_email=self.merchant_email, merchant_name=self.merchant_name,
                                          recipient_email=customer_email, recipient_name=customer_name,
-                                         items=items, currency=self.currency, due_date=due, note=memo)
+                                         items=items, currency=self.currency, due_date=due, note=memo,
+                                         invoice_number=invoice_number)
         row_id = self.store.add_customer_invoice(
             paypal_invoice_id=inv.get("id"), invoice_number=inv.get("detail", {}).get("invoice_number"),
             customer_name=customer_name, customer_email=customer_email, amount=round(total, 2),

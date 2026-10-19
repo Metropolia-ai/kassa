@@ -20,11 +20,14 @@ class Decision:
 
 
 def evaluate(bill: dict, *, auto_pay_limit: float, supplier: dict | None, duplicate: dict | None,
-             today: date | None = None, min_confidence: float = 0.75) -> Decision:
+             today: date | None = None, min_confidence: float = 0.75, similar: dict | None = None) -> Decision:
     today = today or date.today()
     reasons: list[str] = []
     if duplicate:
         return Decision("rejected", [f"duplicate of bill #{duplicate['id']} (same supplier and invoice number {bill.get('invoice_number')})"])
+    if similar:
+        return Decision("needs_approval", [f"possible duplicate of bill #{similar['id']} (invoice {similar.get('invoice_number')}, "
+                                           f"same supplier and amount, {similar.get('status')})"])
     if bill.get("risk_level") == "high":
         sig = bill.get("risk_signals") or []
         return Decision("needs_approval", ["POSSIBLE SCAM: " + "; ".join(sig[:5])])

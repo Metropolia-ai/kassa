@@ -82,9 +82,12 @@ def test_pipeline_first_invoice_needs_approval_then_trusted_autopays(kassa):
     # duplicate is rejected
     b3 = kassa.ingest("03", read("03-pixelforge-duplicate.txt"))
     assert b3["status"] == "rejected" and "duplicate" in b3["reason"]
-    # same supplier, new number, under limit -> auto approved
-    text = read("01-pixelforge-render.txt").replace("PF-2026-0412", "PF-2026-0413")
-    b4 = kassa.ingest("04", text)
+    # same supplier, new number, same amount -> held as a possible duplicate
+    b4 = kassa.ingest("04", read("01-pixelforge-render.txt").replace("PF-2026-0412", "PF-2026-0413"))
+    assert b4["status"] == "needs_approval" and "possible duplicate" in b4["reason"]
+    # same supplier, new number, different amount, under limit -> auto approved
+    text = read("01-pixelforge-render.txt").replace("PF-2026-0412", "PF-2026-0414").replace("325.05", "225.05")
+    b4 = kassa.ingest("05", text)
     assert b4["status"] == "approved"
     assert kassa.refresh_payouts() == [{"id": b1["id"], "payout_status": "SUCCESS", "status": "paid"}]
     assert kassa.store.get_bill(b1["id"])["status"] == "paid"
