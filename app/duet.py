@@ -12,8 +12,9 @@ from __future__ import annotations
 import json
 import os
 import secrets
+import threading
 from dataclasses import dataclass, field
-from datetime import date, timedelta
+from datetime import date, datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any
 
@@ -76,6 +77,8 @@ class Duet:
     def __init__(self, db_path: str, companies: dict[str, Company], schema: str | None = "duet"):
         self.db = _DB(db_path, schema, DDL)
         self.companies = companies
+        # two windows tick at once; without this both could see "no re-send yet" and send it twice
+        self._resend_lock = threading.Lock()
         for c in companies.values():
             c.kassa.extra_tools.append(({
                 "name": "bill_conversation",
@@ -228,19 +231,30 @@ class Duet:
                                      created_at=f"{when}T09:12:00+00:00")
                 ks.store.add_customer_invoice(paypal_invoice_id=None, invoice_number=prev, customer_name=self.companies[buyer].name,
                                               customer_email=self.companies[buyer].email, amount=amount, currency=cur,
-                                              due_date=_due(11), memo=inv.get("memo"), status="PAID", created_at=f"{when}T09:10:00+00:00")
+                                              due_date=_due(11), memo=self._original_memo(sc), status="PAID", created_at=f"{when}T09:10:00+00:00")
         return self.get_thread(tid)
 
     # ---------------------------------------------------------------- drafts
     def drafts(self) -> list[dict]:
-        """What the supplier's owner can send: the scenarios, seen from their side as invoices ready to go."""
+        """What the supplier's owner can send: the scenarios, seen from their side as invoices ready to go.
+        A re-send is not a draft (the supplier's system sends it by itself), and a draft that already went out
+        is gone until Start over: no owner sends the same invoice twice on purpose."""
+        sent = {r["scenario"] for r in self._rows("SELECT DISTINCT scenario FROM threads")}
         out = []
         for sc in self.scenarios():
+            if sc.get("auto_resend_of") or sc["key"] in sent:
+                continue
             inv = sc["invoice"]
+            log = []
+            for r in sc.get("supplier_records", []):
+                if r["kind"] == "work_log":
+                    for e in r["data"].get("entries", []):
+                        n = {"hours": e["hours"]} if "hours" in e else {"qty": e.get("qty")}
+                        log.append({"date": e.get("date"), **n, "note": e.get("note", "")})
             out.append({"key": sc["key"], "title": inv.get("title") or sc["title"], "note": inv.get("memo"),
                         "amount": _total(inv["items"]), "currency": self.companies[self.buyer_key()].kassa.currency,
                         "items": inv["items"], "customer": self.companies[self.buyer_key()].name,
-                        "hint": sc.get("hint", "")})
+                        "source": inv.get("source", ""), "log": log, "hint": sc.get("hint", "")})
         return out
 
     def send_draft(self, key: str) -> dict:
@@ -248,10 +262,42 @@ class Duet:
         t = self.start(key)
         return self.step(t["id"])
 
+    def maybe_resend(self) -> dict | None:
+        """The supplier's old invoicing system re-sends a paid invoice under a new number a while after it was
+        paid. Nobody presses anything: the first clock tick after the delay sends it. Returns the new thread."""
+        with self._resend_lock:
+            for sc in self.scenarios():
+                orig_key = sc.get("auto_resend_of")
+                if not orig_key:
+                    continue
+                orig = self._row("SELECT id FROM threads WHERE scenario=? AND status='settled' ORDER BY id DESC LIMIT 1", (orig_key,))
+                if not orig:
+                    continue
+                # ids, not created_at: timestamps have one-second resolution and a fast clock creates both in one second
+                if self._row("SELECT id FROM threads WHERE scenario=? AND id>? LIMIT 1", (sc["key"], orig["id"])):
+                    continue
+                last = self._row("SELECT ts FROM messages WHERE thread_id=? ORDER BY id DESC LIMIT 1", (orig["id"],))
+                delay = float(os.environ.get("DUET_RESEND_AFTER_S") or sc.get("resend_after_s", 45))
+                try:
+                    waited = (datetime.now(timezone.utc) - datetime.fromisoformat(last["ts"])).total_seconds() if last else 0
+                except ValueError:
+                    continue
+                if waited < delay:
+                    continue
+                t = self.start(sc["key"])
+                return self.step(t["id"])
+        return None
+
     def tick(self) -> list[dict]:
         """Advance every thread where it is an agent's turn, one step each. Called by whichever window is open."""
         changed = []
+        resent = self.maybe_resend()
+        if resent:
+            # it arrives on this tick and is checked on the next, so the windows can show it arriving
+            changed.append({"id": resent["id"], "status": resent["status"]})
         for t in self._rows("SELECT id, status FROM threads WHERE status NOT IN ('needs_humans','settled','closed','failed') ORDER BY id"):
+            if resent and t["id"] == resent["id"]:
+                continue
             out = self.step(t["id"])
             if out["changed"]:
                 changed.append({"id": out["id"], "status": out["status"]})
@@ -313,8 +359,12 @@ class Duet:
         sc = self._scenario(t)
         inv = sc["invoice"]
         data: dict = {"items": inv["items"], "amount": t["invoice_amount"]}
+        auto = bool(sc.get("auto_resend_of"))
+        if auto:
+            data["auto"] = True
         if sup.kassa.paypal:
-            for _ in range(6):
+            row = None
+            for _ in range(40):  # a fresh database restarts the counter; the sandbox account remembers every number
                 try:
                     row = sup.kassa.create_customer_invoice(
                         customer_name=buy.name, customer_email=buy.email, items=_pp_items(inv["items"]),
@@ -327,6 +377,8 @@ class Duet:
                         raise
                     t["invoice_number"] = self.next_invoice_number(inv.get("prefix", "PF-2026-"))  # someone used it before us
                     self._update(t["id"], invoice_number=t["invoice_number"])
+            if row is None:
+                raise PayPalError(422, {"name": "DUPLICATE_INVOICE_NUMBER", "message": "no free invoice number found after 40 tries"})
             data.update({"paypal_invoice_id": row.get("paypal_invoice_id"), "paypal_status": row.get("status"),
                          "pay_url": row.get("pay_url")})
             self._update(t["id"], paypal_invoice_id=row.get("paypal_invoice_id"), invoice_row_id=row.get("id"))
@@ -335,10 +387,12 @@ class Duet:
                                                        customer_email=buy.email, amount=t["invoice_amount"], currency=t["currency"],
                                                        due_date=_due(inv.get("due_in_days", 14)), memo=inv.get("memo"), status="SENT")
             self._update(t["id"], invoice_row_id=rid)
-        text = self._voice(sup, buy, "invoice", {
-            "invoice_number": t["invoice_number"], "amount": t["invoice_amount"], "currency": t["currency"],
-            "items": _items_text(inv["items"]), "po_number": t.get("po_number"),
-            "paypal_invoice_id": data.get("paypal_invoice_id"), "due": _due(inv.get("due_in_days", 14))})
+        facts = {"invoice_number": t["invoice_number"], "amount": t["invoice_amount"], "currency": t["currency"],
+                 "items": _items_text(inv["items"]), "po_number": t.get("po_number"),
+                 "paypal_invoice_id": data.get("paypal_invoice_id"), "due": _due(inv.get("due_in_days", 14))}
+        if auto:  # no person sent this one, and the message must not pretend otherwise
+            facts["note"] = "sent automatically by the supplier's invoicing system, not by a person"
+        text = self._voice(sup, buy, "invoice", facts)
         self._say(t["id"], sup.key, "agent", "invoice", text, t["invoice_amount"], data)
         self._update(t["id"], status="invoiced", turn=t["buyer"])
 
@@ -348,7 +402,8 @@ class Duet:
         sc = self._scenario(t)
         inv = sc["invoice"]
         cur = t["currency"]
-        bill = buy.kassa.ingest_structured(f"{sup.name} {t['invoice_number']}",
+        source = f"{sup.name} {t['invoice_number']}" + (" (re-sent by their invoicing system)" if sc.get("auto_resend_of") else "")
+        bill = buy.kassa.ingest_structured(source,
                                            _invoice_text(sup, buy, t["invoice_number"], inv, cur),
                                            _fields(sup, t["invoice_number"], inv, cur))
         self._update(t["id"], bill_id=bill["id"])
@@ -402,7 +457,7 @@ class Duet:
             if earlier and (earlier.get("status") or "").upper() in ("PAID", "MARKED_AS_PAID", "SENT", "UNPAID"):
                 if t.get("bill_id"):
                     buy.kassa.store.update_bill(t["bill_id"], status="rejected",
-                                                reason=f"withdrawn by {sup.name}: same work as {earlier['invoice_number']}, already {earlier.get('status', '').lower()}")
+                                                reason=f"withdrawn by {sup.name}: same work as {earlier['invoice_number']}, already {_plain_invoice(earlier.get('status'))}")
                 self._supplier_cancels(t, earlier=earlier)
                 return
             text = self._voice(sup, buy, "explain", {"invoice_number": t["invoice_number"], "currency": t["currency"],
@@ -741,6 +796,11 @@ class Duet:
     def _scenario(self, t: dict) -> dict:
         return next(s for s in self.scenarios() if s["key"] == t["scenario"])
 
+    def _original_memo(self, sc: dict) -> str | None:
+        """A re-send's memo says it was re-sent; the original it copies said what the work was."""
+        orig = next((s for s in self.scenarios() if s["key"] == sc.get("auto_resend_of")), None)
+        return (orig or sc)["invoice"].get("memo")
+
     def _voice(self, me: Company, other: Company, action: str, facts: dict) -> str:
         """The model writes the message; the facts and the action are decided by code. Templates if no model."""
         template = _template(me, other, action, facts)
@@ -873,7 +933,8 @@ def _template(me: Company, other: Company, action: str, f: dict) -> str:
     if action == "invoice":
         pp = f" PayPal invoice {f['paypal_invoice_id']}." if f.get("paypal_invoice_id") else ""
         po = f" against order {f['po_number']}" if f.get("po_number") else ""
-        return f"Invoice {f['invoice_number']}{po}: {f['items']}. Total {_money(f['amount'], cur)}, due {f['due']}.{pp}"
+        auto = f"Sent automatically by {me.name}'s invoicing system. " if f.get("note") else ""
+        return f"{auto}Invoice {f['invoice_number']}{po}: {f['items']}. Total {_money(f['amount'], cur)}, due {f['due']}.{pp}"
     if action == "query":
         return (f"Invoice {f['invoice_number']} is {_money(f['invoice_total'], cur)}, order {f['po_number']} is {_money(f['po_total'], cur)}. "
                 f"Differences: {f['differences']}. Please explain or correct; I can accept up to {_money(f['tolerance'], cur)} over the order on my own.")

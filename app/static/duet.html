@@ -359,23 +359,25 @@ function howtoHtml() {
     <p>You are <b>${esc(ME.owner)}</b>, owner of <b>${esc(ME.merchant_name)}</b>. Kassa is your bookkeeper: it reads supplier bills, pays the ones inside the limits you set through PayPal, and holds the rest for you.</p>
     <p><b>${esc(otherName())}</b> is a supplier that also runs Kassa. When their bookkeeper sends you an invoice, your bookkeeper checks it against what you agreed, asks about the difference, and the two settle it between themselves on PayPal. You are asked only when the gap is bigger than you allowed.</p>
     <ol>
-      <li><b>Open ${esc(otherName())}'s Kassa</b> in a second window (the “Switch company” link, or <a href="/?co=${esc(ME.other.key)}" target="_blank" rel="noopener">this link</a>) and press <b>Send invoice</b> on one of the three invoices waiting there.</li>
+      <li><b>Open ${esc(otherName())}'s Kassa</b> in a second window (the “Switch company” link, or <a href="/?co=${esc(ME.other.key)}" target="_blank" rel="noopener">this link</a>) and press <b>Send invoice</b> on one of the two invoices waiting there.</li>
       <li><b>Come back here.</b> The bill appears under “Bills to pay” with the stamp <b>Checking</b>. Click it to watch the two bookkeepers talk; nothing to press.</li>
+      <li>A minute after the first invoice is paid, Pixelforge's old invoicing system re-sends it under a new number. Watch Kassa catch it: nothing lands on your desk.</li>
       <li><b>“Character animation, 2 scenes”</b> ends on your desk: a card under “Needs you” with the numbers and two or three choices. Pick one; the bookkeepers finish the paperwork.</li>
       <li><b>Ask Kassa</b> on the right: “Why did we pay Pixelforge more than we agreed?”</li>
-      <li><b>Agent limits</b> in the header: loosen or tighten what your bookkeeper may accept alone, then send the same invoice again.</li>
+      <li><b>Agent limits</b> in the header: loosen or tighten what your bookkeeper may accept alone, then press “Start over” and send the same invoice again.</li>
     </ol>
-    <p class="fine">Everything runs in the PayPal sandbox: real invoices, real payouts, no real money. “Start over” clears the demo on both sides.</p>`;
+    <p class="fine">Everything runs in the PayPal sandbox: real invoices, real payouts, no real money. “Start over” resets the demo for everyone using it right now, on both sides.</p>`;
   return `
     <p>You are <b>${esc(ME.owner)}</b>, owner of <b>${esc(ME.merchant_name)}</b>, a small render studio. Kassa is your bookkeeper: it bills your customers through PayPal and makes sure you get paid.</p>
     <p><b>${esc(otherName())}</b> is a customer that also runs Kassa. When you send them an invoice, their bookkeeper checks it against what they agreed; your bookkeeper answers from your records; the two settle it and the money arrives by PayPal. You are asked only when they offer less than you allowed.</p>
     <ol>
-      <li><b>Press “Send invoice”</b> on one of the three invoices under “Ready to send”. It goes out through PayPal Invoicing right away.</li>
+      <li><b>Press “Send invoice”</b> on one of the two invoices under “Ready to send”. It goes out through PayPal Invoicing right away.</li>
       <li><b>Watch the row</b> in “Invoices sent”: Sent, then Being checked, then Paid. Click it to read what the two bookkeepers said.</li>
+      <li>About a minute after ${esc(otherName())} pays, your old invoicing system re-sends that invoice by itself; your bookkeeper withdraws it when ${esc(otherName())}'s bookkeeper asks.</li>
       <li><b>Open ${esc(otherName())}'s Kassa</b> in a second window (<a href="/?co=${esc(ME.other.key)}" target="_blank" rel="noopener">this link</a>) to see the same invoice from the customer's side.</li>
       <li><b>“Character animation, 2 scenes”</b> stops at the limits both owners set; the customer's owner decides first, and if they offer less than your floor, the card lands on your desk.</li>
     </ol>
-    <p class="fine">Everything runs in the PayPal sandbox: real invoices, real payouts, no real money.</p>`;
+    <p class="fine">Everything runs in the PayPal sandbox: real invoices, real payouts, no real money. “Start over” resets the demo for everyone using it right now, on both sides.</p>`;
 }
 function openHowto() { $('howto-body').innerHTML = howtoHtml(); $('howto-go').textContent = isBuyer() ? `Open ${otherName()}'s Kassa` : 'Show me the invoices'; if (!$('howto').open) $('howto').showModal(); }
 $('howto-open').onclick = openHowto;
@@ -602,10 +604,17 @@ $('queue').onclick = async e => {
 };
 function renderDrafts(drafts) {
   $('drafts-wrap').hidden = !drafts.length;
-  $('drafts-sub').textContent = drafts.length ? `${drafts.length} invoices for ${otherName()}, who also runs Kassa` : '';
-  $('drafts').innerHTML = drafts.map(d => `<div class="draft"><b>${esc(d.title)}</b><span class="to">to ${esc(d.customer)}<span class="badge">uses Kassa</span></span><div class="amt">${money(d.amount, d.currency)}</div>${d.hint ? `<span class="hint">${esc(d.hint)}</span>` : ''}<button class="btn solid" data-send="${esc(d.key)}">Send invoice</button></div>`).join('');
+  $('drafts-sub').textContent = drafts.length ? `${drafts.length} invoice${drafts.length === 1 ? '' : 's'} Kassa prepared for ${otherName()}, who also runs Kassa` : '';
+  $('drafts').innerHTML = drafts.map(d => `<div class="draft"><b>${esc(d.title)}</b>${d.source ? `<span class="hint">${esc(d.source)}${d.log && d.log.length ? ` · <button class="linkbtn" data-log="${esc(d.key)}">See the log</button>` : ''}</span>` : ''}<span class="to">to ${esc(d.customer)}<span class="badge">uses Kassa</span></span><div class="amt">${money(d.amount, d.currency)}</div>${d.hint ? `<span class="hint">${esc(d.hint)}</span>` : ''}<button class="btn solid" data-send="${esc(d.key)}">Send invoice</button></div>`).join('');
+}
+function showLog(d) {  // the records the draft was made from, so the owner sees it did not come from nowhere
+  const hours = d.log.some(e => e.hours != null);
+  const table = `<h4>Your log</h4><table class="cmp"><tr><th>Date</th><th class="num">${hours ? 'Hours' : 'Quantity'}</th><th>Note</th></tr>`
+    + d.log.map(e => `<tr><td>${esc(e.date)}</td><td class="num">${esc(hours ? e.hours : e.qty)}</td><td>${esc(e.note)}</td></tr>`).join('') + `</table>`;
+  showDetail(d.title, [['Customer', d.customer], ['Amount', money(d.amount, d.currency)], ['Drafted from', d.source]], null, [], table);
 }
 $('drafts').onclick = async e => {
+  const lg = e.target.closest('button[data-log]'); if (lg) { showLog(DRAFTS.find(x => x.key === lg.dataset.log)); return; }
   const b = e.target.closest('button[data-send]'); if (!b) return;
   const d = DRAFTS.find(x => x.key === b.dataset.send);
   await act(() => my(`/drafts/${b.dataset.send}/send`, {method:'POST'}), `Sending ${money(d.amount, d.currency)} to ${otherName()} through PayPal…`, r => `Invoice ${r.invoice_number} sent to ${otherName()}. Their bookkeeper is reading it.`);
@@ -641,7 +650,9 @@ async function load() {
 function announce() {
   for (const t of THREADS) {
     const prev = prevStatus.get(t.id); prevStatus.set(t.id, t.status);
-    if (prev === undefined) { if (isBuyer() && isActive(t) && t.status === 'invoiced') toast(`New bill from ${t.other}: ${money(t.invoice_amount, t.currency)}. Kassa is checking it against what you agreed.`, 'them'); continue; }
+    const auto = !!(t.messages[0] && t.messages[0].data && t.messages[0].data.auto);
+    // a re-send is checked on the next tick, so it may already be past 'invoiced' when this window first sees it
+    if (prev === undefined) { if (isBuyer() && isActive(t) && (t.status === 'invoiced' || auto)) toast(auto ? `Another bill from ${t.other}, ${money(t.invoice_amount, t.currency)}, re-sent by their system. Kassa is checking it.` : `New bill from ${t.other}: ${money(t.invoice_amount, t.currency)}. Kassa is checking it against what you agreed.`, 'them'); continue; }
     if (prev === t.status) continue;
     if (t.status === 'needs_humans' && t.waiting === CO) toast(`Your bookkeeper needs you on invoice ${t.invoice_number}. The card is under “Needs you”.`, 'you');
     else if (t.status === 'settled') toast(`${cap(t.outcome)}: ${money(t.agreed_amount, t.currency)} ${isBuyer() ? 'paid to' : 'received from'} ${t.other}.`);
@@ -653,10 +664,15 @@ function announce() {
 
 /* ---------- the clock: whichever window is open moves the bookkeepers along ---------- */
 let clock = null;
+// keep ticking for a while after the last thread finished: the supplier's system re-sends a paid invoice
+// on a tick about a minute later, and the person watching should see it arrive
+const LINGER_MS = 120000;
+const lastChangeMs = () => Math.max(0, ...THREADS.map(t => Date.parse(t.updated_at) || 0));
+const clockNeeded = () => THREADS.some(isActive) || (THREADS.length > 0 && Date.now() - lastChangeMs() < LINGER_MS);
 function startClock() { if (clock) return; clock = setInterval(tick, 2500); tick(); }
 async function tick() {
   if (ticking || $('gate').open) return;
-  if (!THREADS.some(isActive)) { clearInterval(clock); clock = null; return; }
+  if (!clockNeeded()) { clearInterval(clock); clock = null; return; }
   ticking = true;
   try { const changed = await api('/duet/tick', {method:'POST'}); if (changed.length) await load(); } catch (e) { /* next tick */ } finally { ticking = false; }
 }
@@ -664,7 +680,7 @@ async function tick() {
 /* ---------- actions ---------- */
 $('btn-pay').onclick = () => act(async () => { const r = await my('/bills/pay-approved', {method:'POST'}); if (!r.length) throw new Error('No bills are approved yet.'); return r; }, 'Sending payments to PayPal…', r => `Sent ${r.length} payment(s) to PayPal.`);
 $('btn-refresh').onclick = () => act(() => my('/refresh', {method:'POST'}), 'Checking PayPal…', 'Statuses updated from PayPal.');
-$('btn-reset').onclick = () => confirm(`Clear the demo on both sides (yours and ${otherName()}'s) and start over? Two months of history stay on the books.`) && act(async () => { await api('/duet/reset', {method:'POST'}); prevStatus.clear(); seen.clear(); }, 'Starting over…', 'Cleared.');
+$('btn-reset').onclick = () => confirm(`Start over resets the demo for everyone using it right now, on both companies' sides. Two months of history stay on the books. Continue?`) && act(async () => { await api('/duet/reset', {method:'POST'}); prevStatus.clear(); seen.clear(); }, 'Starting over…', 'Cleared.');
 
 /* ---------- chat ---------- */
 function renderChat(msgs) {
@@ -696,7 +712,7 @@ $('suggest').onclick = e => { const b = e.target.closest('button'); if (b) sendC
   if (h.gate && !getKey()) { askKey(''); return; }
   try { await load(); if (!localStorage.getItem(HOWTO_KEY) && !location.hash) openHowto(); startClock(); } catch (e) {}
 })();
-setInterval(() => { if (!$('gate').open && !document.body.classList.contains('working') && !chatBusy && !ticking) load().then(() => { if (THREADS.some(isActive)) startClock(); }).catch(() => {}); }, 10000);
+setInterval(() => { if (!$('gate').open && !document.body.classList.contains('working') && !chatBusy && !ticking) load().then(() => { if (clockNeeded()) startClock(); }).catch(() => {}); }, 10000);
 </script>
 </body>
 </html>

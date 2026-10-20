@@ -36,7 +36,8 @@
           "unit": 12.0
         }
       ],
-      "title": "October render, first half: 50 h"
+      "title": "October render, first half: 50 h",
+      "source": "Drafted by Kassa from your work log: 50 h in 3 entries, 6–12 Oct, plus storage"
     },
     "supplier_records": [
       {
@@ -96,7 +97,8 @@
           "unit": 1200.0
         }
       ],
-      "title": "Character animation, 2 scenes"
+      "title": "Character animation, 2 scenes",
+      "source": "Drafted by Kassa from your delivery log: 2 scenes delivered, 10 and 16 Oct"
     },
     "supplier_records": [
       {
@@ -129,7 +131,7 @@
     "seed_prior_bill": true,
     "invoice": {
       "due_in_days": 14,
-      "memo": "Render farm, first half of October",
+      "memo": "Render farm, first half of October (re-sent automatically)",
       "items": [
         {
           "name": "GPU render hours",
@@ -144,6 +146,7 @@
       ],
       "title": "October render, first half (resent)"
     },
-    "hint": "Pixelforge's system raised this one a second time after a sync glitch."
+    "auto_resend_of": "extra-hours",
+    "resend_after_s": 45
   }
 ]
