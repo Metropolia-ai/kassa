@@ -221,3 +221,27 @@ def test_no_resend_before_the_delay(duet):
         pass
     assert duet.get_thread(t["id"])["status"] == "settled"
     assert duet.maybe_resend() is None                                   # 45 s have not passed
+
+
+def test_a_claimed_thread_is_not_stepped_twice(duet):
+    import threading
+    t = duet.start("extra-hours")
+    # a slow first step: two workers race for the same 'new' thread; only one may send the invoice
+    orig = duet._supplier_invoice
+    def slow(th):
+        import time; time.sleep(0.3); orig(th)
+    duet._supplier_invoice = slow
+    results = []
+    ws = [threading.Thread(target=lambda: results.append(duet.step(t["id"]))) for _ in range(2)]
+    [w.start() for w in ws]; [w.join() for w in ws]
+    assert sorted(r.get("busy", False) for r in results) == [False, True]
+    assert len([m for m in duet.get_thread(t["id"])["messages"] if m["action"] == "invoice"]) == 1
+    assert len(duet.companies["pixelforge"].kassa.store.list_customer_invoices()) == 1
+
+
+def test_an_abandoned_claim_is_taken_over(duet):
+    from datetime import datetime, timedelta, timezone
+    t = duet.start("extra-hours")
+    old = (datetime.now(timezone.utc) - timedelta(seconds=200)).isoformat(timespec="seconds")
+    duet.db.execute("UPDATE threads SET claimed_at=? WHERE id=?", (old, t["id"]))
+    assert duet.step(t["id"])["status"] == "invoiced"

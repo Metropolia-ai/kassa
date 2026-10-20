@@ -1,0 +1,16 @@
+1
+00:00:00,100 --> 00:00:06,639
+A minute later, Pixelforge's old invoicing system re-sends the first invoice under a new number.
+
+2
+00:00:06,589 --> 00:00:13,286
+Frappua's bookkeeper recognises the same work, same amount, already paid, and asks.
+
+3
+00:00:13,286 --> 00:00:18,418
+Pixelforge's bookkeeper checks its books and withdraws the PayPal invoice.
+
+4
+00:00:18,418 --> 00:00:20,392
+Nobody saw it.
+

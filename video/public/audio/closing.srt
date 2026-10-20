@@ -1,0 +1,12 @@
+1
+00:00:00,100 --> 00:00:01,652
+Kassa.
+
+2
+00:00:01,602 --> 00:00:07,405
+Two bookkeepers that settle an invoice between themselves, and people only when it matters.
+
+3
+00:00:07,405 --> 00:00:13,050
+Built on PayPal Invoicing and Payouts, open source, links below.
+

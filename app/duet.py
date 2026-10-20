@@ -35,7 +35,7 @@ CREATE TABLE IF NOT EXISTS threads (
   invoice_amount REAL, agreed_amount REAL, currency TEXT,
   status TEXT NOT NULL, turn TEXT, rounds INTEGER DEFAULT 0,
   bill_id INTEGER, invoice_row_id INTEGER, payout_batch_id TEXT, payout_status TEXT,
-  outcome TEXT, waiting TEXT
+  outcome TEXT, waiting TEXT, claimed_at TEXT
 );
 CREATE TABLE IF NOT EXISTS messages (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -79,6 +79,10 @@ class Duet:
         self.companies = companies
         # two windows tick at once; without this both could see "no re-send yet" and send it twice
         self._resend_lock = threading.Lock()
+        try:  # older databases: the per-thread claim column (see step)
+            self.db.execute("ALTER TABLE threads ADD COLUMN claimed_at TEXT")
+        except Exception:
+            pass
         for c in companies.values():
             c.kassa.extra_tools.append(({
                 "name": "bill_conversation",
@@ -319,6 +323,25 @@ class Duet:
     # ------------------------------------------------------------------ step
     def step(self, tid: int) -> dict:
         """Advance the thread by one agent action. Returns the thread; `changed` tells the UI whether anything happened."""
+        # Two windows poll /tick and a Send runs its first step inline, so two workers can pick the same thread
+        # at the same moment; that once produced two PayPal invoices and two payouts for one bill. A thread is
+        # claimed in the database before it is stepped; a claim older than 90 s is treated as abandoned.
+        stale = (datetime.now(timezone.utc) - timedelta(seconds=90)).isoformat(timespec="seconds")
+        cur = self.db.execute("UPDATE threads SET claimed_at=? WHERE id=? AND (claimed_at IS NULL OR claimed_at < ?)",
+                              (now(), tid, stale))
+        if cur.rowcount == 0:
+            t = self.get_thread(tid)
+            if not t:
+                raise KeyError(tid)
+            t["changed"] = False
+            t["busy"] = True
+            return t
+        try:
+            return self._step_claimed(tid)
+        finally:
+            self.db.execute("UPDATE threads SET claimed_at=NULL WHERE id=?", (tid,))
+
+    def _step_claimed(self, tid: int) -> dict:
         t = self.get_thread(tid)
         if not t:
             raise KeyError(tid)
