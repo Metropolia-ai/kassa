@@ -16,7 +16,7 @@ def duet(tmp_path, monkeypatch):
     db = str(tmp_path / "duet.db")
     buyer = Company("frappua", "Frappua", "pay@frappua.example", Kassa(Store(db, schema="co_frappua"), None,
                     merchant_email="pay@frappua.example", merchant_name="Frappua", auto_pay_limit=500),
-                    owner="Dima", staff=["Alena Mima", "Erik Sindonen"])
+                    owner="Erik", staff=["Alena Mima", "Erik Sindonen"])
     sup = Company("pixelforge", "Pixelforge Oy", "ar@pixelforge.example", Kassa(Store(db, schema="co_pixelforge"), None,
                   merchant_email="ar@pixelforge.example", merchant_name="Pixelforge Oy", auto_pay_limit=500),
                   owner="Mika")
@@ -154,7 +154,7 @@ def test_buyer_sees_the_bill_as_negotiating_then_waiting_for_the_owner(duet):
     while duet.tick():
         pass
     bill = duet.companies["frappua"].kassa.store.get_bill(bill["id"])
-    assert bill["status"] == "negotiating" and bill["reason"].startswith("waiting for Dima")
+    assert bill["status"] == "negotiating" and bill["reason"].startswith("waiting for Erik")
     assert duet.threads_for("frappua")[-1]["decisions"] and not duet.threads_for("pixelforge")[-1]["decisions"]
 
 

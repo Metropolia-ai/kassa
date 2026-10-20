@@ -1,7 +1,7 @@
 """Routes and wiring for Kassa x Kassa (two companies, one deployment). Enabled with DUET=1.
 
 Companies come from the environment, two of them, prefixes CO_A_ and CO_B_:
-  CO_A_KEY=frappua CO_A_NAME="Frappua" CO_A_EMAIL=... CO_A_OWNER="Dima" CO_A_STAFF="Alena Mima,Erik Sindonen"
+  CO_A_KEY=frappua CO_A_NAME="Frappua" CO_A_EMAIL=... CO_A_OWNER="Erik" CO_A_STAFF="Alena Mima,Erik Sindonen"
   CO_A_PAYPAL_CLIENT_ID=... CO_A_PAYPAL_CLIENT_SECRET=... CO_A_AUTO_PAY_LIMIT=500
   CO_A_OPENING_BALANCE=... CO_A_OPENING_AT=...
 DUET_BUYER / DUET_SUPPLIER name the keys (default: A buys, B supplies).

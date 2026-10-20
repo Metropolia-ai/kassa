@@ -1,11 +1,11 @@
 # Kassa x Kassa: UX plan (product view, one company per screen)
 
 ## User
-The owner of a 3-10 person studio (Dima at Frappua; Mika at Pixelforge Oy). Knows e-mail, PayPal, Excel;
+The owner of a 3-10 person studio (Erik at Frappua; Mika at Pixelforge Oy). Knows e-mail, PayPal, Excel;
 does not know "purchase order", "payout batch", "MARKED_AS_PAID". Works on a laptop, 1366x768 or wider,
 sometimes a phone. Opens Kassa when it asks, or when a supplier asks "why did you pay less?".
 
-Assumptions (A1-A4, to confirm with Dima):
+Assumptions (A1-A4, to confirm with the owner):
 - A1: small companies have no formal purchase orders; "what we agreed" comes from a quote or an e-mail.
 - A2: the owner wants to see the other company's agent only inside the bill's thread, never its settings.
 - A3: one person per company decides; no approval chains.
@@ -13,14 +13,14 @@ Assumptions (A1-A4, to confirm with Dima):
   thread would go by e-mail (not built, one sentence in the guide).
 
 ## Tasks
-1. Dima: an invoice from Pixelforge arrived. Nothing to do: see that it was checked, argued and paid, and why.
+1. Erik: an invoice from Pixelforge arrived. Nothing to do: see that it was checked, argued and paid, and why.
    Done = the bill row says Paid with "Settled by the agents in 14 s, no one interrupted" and the thread is one click away.
-2. Dima: Kassa needs him. Decide in one click with the numbers in front of him. Done = the card is gone,
+2. Erik: Kassa needs him. Decide in one click with the numbers in front of him. Done = the card is gone,
    the bill goes on to Paid, the thread shows his decision.
 3. Mika: send the October invoice to Frappua and get paid without chasing. Done = the invoice row says Paid,
    PayPal confirms, no e-mail written.
-4. Dima, a week later: "Why did we pay Pixelforge 337 and not 272?" Ask Kassa, get the reason with evidence.
-5. Dima, once: set what the agent may do alone, in three plain sentences.
+4. Erik, a week later: "Why did we pay Pixelforge 337 and not 272?" Ask Kassa, get the reason with evidence.
+5. Erik, once: set what the agent may do alone, in three plain sentences.
 
 ## Screens and steps (labels as written)
 Frappua's Kassa (`/?co=frappua`), the existing dashboard shell:
