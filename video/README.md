@@ -27,29 +27,54 @@ All render commands use the system Chrome (`--browser-executable=/usr/bin/google
   `paypal-cancelled.png`) are tried, with no events. No events = no callouts; stamps then fall back to fixed
   times that follow the voice-over.
 
+Scene order: intro, rules, scene1, scene3, scene2, chat, closing (the duplicate comes straight after scene1).
 Scene -> clip: intro -> `intro`, rules -> `limits`, scene1/2/3 -> `scene1/2/3` (split), chat -> `chat`,
 stills `paypal-paid` (end of scene1) and `paypal-cancelled` (end of scene3). The closing card has no clip.
+Clip area for single and split scenes: 1840x1035 (margins 40).
 
-### Which part of a clip is shown
-From 1.5 s before the first event to 3 s after the last one (the whole clip if there are no events). If that is
-longer than the scene, the clip plays faster, up to 3x; if the clip is too short, it starts earlier and then
-holds its last frame. See `planClip()` in `src/manifest.ts`.
+### Which part of a clip is shown (`segmentsFor()` in `src/manifest.ts`)
+Chosen from the manifest events; a clip is sped up at most 1.3x (`MAX_RATE`), what still does not fit is cut
+from the end, a clip that runs out holds its last frame.
+- scene1: the whole take if it fits at <= 1.3x, else from the Send click minus 1 s.
+- scene3: from the "toast ... re-sent" event minus 2.5 s (the first ~39 s are the wait for the re-send).
+- scene2: from the "card under Needs you" event minus 8 s to the last "drawer closed" + 0.3 s.
+- chat: two pieces: from 1.7 s before the click to 4 s after it ("Kassa is working"), then from 1 s before
+  "answer appears" to 3.1 s after "Activity log visible".
+- intro, limits: the whole clip.
 
 ### How events become callouts (`src/overlays.tsx`)
-Events are matched by words in `what`:
-- `click ...` with `x`,`y`: an ink dot at the point; in scene1 and rules also a circle (a wide one for `row`).
-- `toast ...`: circle around the toast (bottom-left of the window named by `(left)`/`(right)`).
-- the first `message: ...` in scene1: a frame around the drawer; every `message: <word>` lights a step chip.
-- `card ...` (scene2), `Refused`/`Withdrawn` (scene3), `answer` (chat): circle with a label.
-- scene1 `outcome`/`settled`: the SETTLED stamp; the number of seconds is taken from the first `<n> s` in any
-  event text, else 14. scene2: YOUR TURN at `card`, PAID at the last event mentioning `paid`. scene3: WITHDRAWN
-  at the last `withdrawn` event.
-Optional extension of the contract: an event may carry `"box": [x, y, w, h]` (1920x1080 clip coordinates) to
-place the circle exactly; without it the position comes from `x`,`y` or from defaults that match the Kassa layout.
+Labels are fixed words picked by the event text; raw event text is never shown.
+| event text contains | label |
+|---|---|
+| `click ... Send invoice` | Mika presses Send |
+| `toast` + `New bill` | the invoice arrives |
+| `click bill row` / `drawer open` | Erik opens the bill (one callout for both) |
+| `card under` / `card appears` | Erik's decision |
+| `click Pay 1` | one click |
+| `re-sent` | re-sent by their system |
+| `Refused` (capital R) | refused |
+| `Withdrawn` (capital W) | withdrawn |
+| `answer appears` (chat) | the answer |
+`message: ...` events draw nothing; they light the step chips. Any other event: no callout. Every click with
+`x`,`y` gets an ink dot. Click callouts start 0.6 s before the click. Positions: the event's optional
+`"box": [x, y, w, h]`, else the click point, else boxes measured on the recordings (toast bottom-left of a window,
+the rows that change in scene2/scene3, the decision card, the chat answer).
+
+Focus moves: each click callout (and the chat answer) eases a 1.35x zoom onto its point over 12 frames, holds while
+the callout is on, eases back. While the bill drawer is open on the right (from "drawer open" to "drawer
+closed", or the scene end) the camera holds 1.25x on the lower right (the messages). The centre is clamped, so the
+paper behind the frame never shows; the two title bars follow the seam between the windows.
+
+Step chips (bottom left, under the caption), fixed words lit at their events: scene1 asked, explained, agreed,
+paid, confirmed; scene3 arrives, asked, withdrawn; scene2 checked, your turn, one click, reissued, paid.
+
+Stamps: scene1 SETTLED with the seconds from the outcome text ("in 25 s") and 0 PEOPLE; scene3 WITHDRAWN, 0 PEOPLE;
+scene2 YOUR TURN at the card, PAID with "1 decision by a person" at "Settled in".
 
 ## Durations
-Scene length = max(voice-over + 0.6 s, the scene minimum from the script's timecodes), computed in
-`src/timeline.ts` from `src/audioConfig.ts`. Transitions are a paper wipe of 8 frames out and 8 in, inside the
+Scene length = max(voice-over + 0.6 s, the scene minimum from the script's timecodes), except where the
+recording sets it (`LENGTH` in `src/timeline.ts`: scene1 41 s, scene2 38 s, chat 18.7 s), never shorter than
+the voice-over + 0.6 s. Total 2:54.8. Transitions are a paper wipe of 8 frames out and 8 in, inside the
 scenes, so the total is exactly the sum of the scenes. Voice-over timings for the animations come from the
 sentence cues edge-tts writes next to each mp3 (`public/audio/<scene>.srt`).
 

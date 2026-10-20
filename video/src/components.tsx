@@ -1,12 +1,13 @@
 import React from "react";
-import { AbsoluteFill, Easing, Freeze, Img, OffthreadVideo, interpolate, useCurrentFrame } from "remotion";
+import { AbsoluteFill, Easing, Freeze, Img, OffthreadVideo, Sequence, interpolate, useCurrentFrame } from "remotion";
 import { C, FONT } from "./theme";
 import { FPS, WIPE, sec } from "./timeline";
 import type { Box, ClipPlan, MediaInfo } from "./manifest";
 
 export type Rect = { x: number; y: number; w: number; h: number };
-export const BAR = 36; // window title bar height
-export const STD: Rect = { x: 192, y: 60, w: 1536, h: 864 }; // standard clip area (0.8 of 1920x1080)
+export const BAR = 30; // window title bar height
+/** Clip area for single and split scenes: 1840 px wide (margins 40), 16:9, title bar above. */
+export const FULL: Rect = { x: 40, y: 38, w: 1840, h: 1035 };
 
 const clamp = { extrapolateLeft: "clamp", extrapolateRight: "clamp" } as const;
 
@@ -16,14 +17,14 @@ export const Paper: React.FC<{ children?: React.ReactNode }> = ({ children }) =>
   <AbsoluteFill style={{ background: C.ledger, fontFamily: FONT, color: C.ink }}>{children}</AbsoluteFill>
 );
 
-export const Caption: React.FC<{ text: string; from?: number }> = ({ text, from = 6 }) => {
+export const Caption: React.FC<{ text: string; from?: number; bottom?: number }> = ({ text, from = 6, bottom = 34 }) => {
   const f = useCurrentFrame();
   const o = interpolate(f, [from, from + 10], [0, 1], clamp);
   const x = interpolate(f, [from, from + 12], [-30, 0], { ...clamp, easing: Easing.out(Easing.cubic) });
   return (
     <div
       style={{
-        position: "absolute", left: 56, bottom: 34, opacity: o, transform: `translateX(${x}px)`,
+        position: "absolute", left: 56, bottom, opacity: o, zIndex: 45, transform: `translateX(${x}px)`,
         background: C.sheet, border: `1px solid ${C.rule}`, borderLeft: `6px solid ${C.ink}`, borderRadius: 6,
         padding: "10px 24px 12px", fontSize: 36, fontWeight: 600, color: C.ink, boxShadow: `0 6px 18px ${C.shade}`,
         whiteSpace: "nowrap",
@@ -79,50 +80,95 @@ export const Stamp: React.FC<{
 
 /* ---------- window frames and clips ---------- */
 
+/** The clip pieces laid end to end, then the last frame held. */
 const ClipVideo: React.FC<{ plan: ClipPlan }> = ({ plan }) => {
   const f = useCurrentFrame();
-  const v = <OffthreadVideo src={plan.src!} trimBefore={plan.trimBefore > 0 ? plan.trimBefore : undefined} playbackRate={plan.rate} muted style={{ width: "100%", height: "100%", objectFit: "cover" }} />;
-  return f < plan.playable ? v : <Freeze frame={plan.playable}>{v}</Freeze>;
+  const style = { width: "100%", height: "100%", objectFit: "cover" as const };
+  const last = plan.laid[plan.laid.length - 1];
+  const video = (l: ClipPlan["laid"][number]) => (
+    <OffthreadVideo src={plan.src!} trimBefore={Math.round(l.from * FPS) || undefined} playbackRate={plan.rate} muted style={style} />
+  );
+  return (
+    <>
+      {plan.laid.map((l, i) => (
+        <Sequence key={i} from={l.start} durationInFrames={Math.max(1, l.frames)} layout="none">
+          {video(l)}
+        </Sequence>
+      ))}
+      {f >= last.start + last.frames ? (
+        <Sequence from={last.start} layout="none">
+          <Freeze frame={Math.max(0, last.frames - 2)}>{video(last)}</Freeze>
+        </Sequence>
+      ) : null}
+    </>
+  );
 };
 
 export const Placeholder: React.FC<{ label: string }> = ({ label }) => (
   <div style={{ position: "absolute", inset: 0, background: "#CDD3CC", display: "flex", alignItems: "flex-start", justifyContent: "center", paddingTop: "12%", boxSizing: "border-box" }}>
-    <div style={{ fontSize: 40, fontWeight: 600, color: "#6E7A74", letterSpacing: "0.04em", fontFamily: "ui-monospace, monospace" }}>{label}</div>
+    <div style={{ fontSize: 40, fontWeight: 600, color: "#6E7A74", letterSpacing: "0.04em", fontFamily: "ui-monospace, monospace", background: "#CDD3CC", padding: "0 20px" }}>{label}</div>
   </div>
 );
 
 type Pane = { label: string; color: string };
 
+/** A focus move: zoom z centred on (x, y) in clip coordinates, eased in from `at`, held to `until`. */
+export type Zoom = { at: number; until: number; x: number; y: number; z: number };
+export const ZOOM_EASE = 12;
+
+/** Current zoom: the strongest zoom wins the scale, the centre is the weighted mix (smooth pans). */
+export function zoomAt(f: number, zooms: Zoom[]): { z: number; x: number; y: number } {
+  let zmax = 1, wx = 0, wy = 0, ws = 0;
+  for (const zm of zooms) {
+    const up = interpolate(f, [zm.at, zm.at + ZOOM_EASE], [0, 1], { ...clamp, easing: Easing.inOut(Easing.cubic) });
+    const down = interpolate(f, [zm.until, zm.until + ZOOM_EASE], [1, 0], { ...clamp, easing: Easing.inOut(Easing.cubic) });
+    const w = Math.min(up, down);
+    if (w <= 0) continue;
+    zmax = Math.max(zmax, 1 + (zm.z - 1) * w);
+    wx += zm.x * w; wy += zm.y * w; ws += w;
+  }
+  return ws > 0 ? { z: zmax, x: wx / ws, y: wy / ws } : { z: 1, x: 960, y: 540 };
+}
+
 /**
  * A clip in a thin window frame on paper. layout "split": one 1920x1080 recording that holds both
- * windows, drawn as two frames over its two halves.
+ * windows, drawn as two frames over its two halves. `zooms` move the camera inside the frame; the
+ * centre is clamped so the frame is always filled, and the two title bars follow the seam.
  */
 export const ClipStage: React.FC<{
-  rect: Rect; plan: ClipPlan; split?: boolean; panes: Pane[]; opacity?: number; scale?: number;
+  rect: Rect; plan: ClipPlan; split?: boolean; panes: Pane[]; opacity?: number; scale?: number; bar?: number; zooms?: Zoom[];
   children?: (s: number) => React.ReactNode;
-}> = ({ rect, plan, split, panes, opacity = 1, scale = 1, children }) => {
+}> = ({ rect, plan, split, panes, opacity = 1, scale = 1, bar = BAR, zooms = [], children }) => {
+  const f = useCurrentFrame();
   const s = rect.w / 1920;
-  const halves = split ? [{ x: 0, w: rect.w / 2 }, { x: rect.w / 2, w: rect.w / 2 }] : [{ x: 0, w: rect.w }];
+  const W = rect.w, H = rect.h;
+  const zm = zoomAt(f, zooms);
+  const z = zm.z;
+  const cx = Math.min(Math.max(zm.x * s, W / (2 * z)), W - W / (2 * z));
+  const cy = Math.min(Math.max(zm.y * s, H / (2 * z)), H - H / (2 * z));
+  const tx = W / 2 - cx * z, ty = H / 2 - cy * z;
+  const seam = Math.min(W, Math.max(0, tx + (W / 2) * z)); // where the middle of the recording is on screen
+  const bars = split
+    ? [{ x: 0, w: seam - 5, pane: panes[0] }, { x: seam + 5, w: W - seam - 5, pane: panes[1] }]
+    : [{ x: 0, w: W, pane: panes[0] }];
   return (
-    <div style={{ position: "absolute", left: rect.x, top: rect.y - BAR, width: rect.w, height: rect.h + BAR, opacity, transform: `scale(${scale})`, transformOrigin: "50% 50%" }}>
-      {/* window chrome */}
-      {halves.map((hv, i) => (
-        <div key={i} style={{ position: "absolute", left: hv.x + (split ? (i === 0 ? 0 : 5) : 0), width: hv.w - (split ? 5 : 0), top: 0, height: rect.h + BAR, background: C.sheet, border: `1px solid ${C.rule}`, borderRadius: 8, boxShadow: `0 10px 10px -2px ${C.shade}, 0 0 10px ${C.shade}` }}>
-          <div style={{ height: BAR, display: "flex", alignItems: "center", padding: "0 14px", gap: 10, fontSize: 21, fontWeight: 600, color: panes[i]?.color ?? C.pencil }}>
-            <span style={{ width: 10, height: 10, borderRadius: 5, background: panes[i]?.color ?? C.pencil }} />
-            {panes[i]?.label}
+    <div style={{ position: "absolute", left: rect.x, top: rect.y - bar, width: W, height: H + bar, opacity, transform: `scale(${scale})`, transformOrigin: "50% 50%" }}>
+      <div style={{ position: "absolute", inset: 0, background: C.sheet, border: `1px solid ${C.rule}`, borderRadius: 8, boxShadow: `0 10px 10px -2px ${C.shade}, 0 0 10px ${C.shade}` }} />
+      {split ? <div style={{ position: "absolute", left: seam - 5, width: 10, top: 0, height: bar, background: C.ledger }} /> : null}
+      {bars.map((b, i) =>
+        b.w > 0 ? (
+          <div key={i} style={{ position: "absolute", left: b.x, width: b.w, top: 0, height: bar, overflow: "hidden", display: "flex", alignItems: "center", padding: "0 14px", gap: 10, fontSize: 21, fontWeight: 600, color: b.pane?.color ?? C.pencil, whiteSpace: "nowrap", boxSizing: "border-box", opacity: b.w > 260 ? 1 : 0 }}>
+            <span style={{ width: 10, height: 10, borderRadius: 5, background: b.pane?.color ?? C.pencil, flexShrink: 0 }} />
+            {b.pane?.label}
           </div>
+        ) : null,
+      )}
+      <div style={{ position: "absolute", left: 1, top: bar, width: W - 2, height: H - 1, overflow: "hidden", borderRadius: "0 0 7px 7px" }}>
+        <div style={{ position: "absolute", left: 0, top: 0, width: W, height: H, transformOrigin: "0 0", transform: `translate(${tx}px, ${ty}px) scale(${z})` }}>
+          {plan.present && plan.src ? <ClipVideo plan={plan} /> : <Placeholder label={`clip: ${plan.id}`} />}
+          {split ? <div style={{ position: "absolute", left: W / 2 - 5, width: 10, top: -2, bottom: -2, background: C.ledger, borderLeft: `1px solid ${C.rule}`, borderRight: `1px solid ${C.rule}` }} /> : null}
+          {children ? <div style={{ position: "absolute", inset: 0 }}>{children(s)}</div> : null}
         </div>
-      ))}
-      {/* recording */}
-      <div style={{ position: "absolute", left: 1, top: BAR, width: rect.w - 2, height: rect.h - 1, overflow: "hidden", borderRadius: "0 0 7px 7px" }}>
-        {plan.present && plan.src ? (
-          <ClipVideo plan={plan} />
-        ) : (
-          <Placeholder label={`clip: ${plan.id}`} />
-        )}
-        {split ? <div style={{ position: "absolute", left: rect.w / 2 - 6, width: 10, top: -2, bottom: -2, background: C.ledger, borderLeft: `1px solid ${C.rule}`, borderRight: `1px solid ${C.rule}` }} /> : null}
-        {children ? <div style={{ position: "absolute", inset: 0 }}>{children(s)}</div> : null}
       </div>
     </div>
   );
@@ -145,8 +191,10 @@ export const Callout: React.FC<{ at: number; box: Box; label?: string; s: number
   const labelH = 52;
   const big = h > areaH * 0.45;
   const above = !big && y - labelH - 8 > 0;
+  // big areas: label to the left of the frame when there is room, so it does not cover the text inside
+  const bigLeft = big && x > 340;
   const ly = big ? Math.max(16, y + pad + 10) : above ? y - labelH - 6 : Math.min(y + h + 6, areaH - labelH - 4);
-  const lx = Math.max(6, Math.min(x + w / 2 - 160, areaW - 330));
+  const lx = bigLeft ? x - 330 : Math.max(6, Math.min(x + w / 2 - 160, areaW - 330));
   return (
     <div style={{ position: "absolute", inset: 0, opacity: o, zIndex: 20 }}>
       <svg width={areaW} height={areaH} style={{ position: "absolute", left: 0, top: 0, overflow: "visible" }}>
@@ -158,7 +206,7 @@ export const Callout: React.FC<{ at: number; box: Box; label?: string; s: number
         )}
       </svg>
       {label ? (
-        <div style={{ position: "absolute", left: lx, top: ly, opacity: lo, width: 320, display: "flex", justifyContent: "center" }}>
+        <div style={{ position: "absolute", left: lx, top: ly, opacity: lo, width: 320, display: "flex", justifyContent: bigLeft ? "flex-end" : "center" }}>
           <div style={{ background: C.paper, color: C.ink, border: `2px solid ${color}`, borderRadius: 6, padding: "5px 16px 7px", fontSize: 30, fontWeight: 700, whiteSpace: "nowrap", boxShadow: `0 4px 12px ${C.shade}` }}>
             {label}
           </div>

@@ -19,7 +19,7 @@ export const Rules: React.FC<DemoProps & { frames: number }> = ({ manifest, medi
   const f = useCurrentFrame();
   const events = eventsOf(manifest, "limits");
   const plan = planClip("limits", media.limits, events, frames);
-  const marks = marksFor(events, plan, false, ["click"]);
+  const { marks } = marksFor("limits", events, plan);
   return (
     <>
       <ClipStage rect={RECT} plan={plan} panes={[{ label: "Frappua · Erik's Kassa · Agent limits", color: C.green }]} opacity={fadeIn(f, 0, 8)}>

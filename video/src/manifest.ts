@@ -1,6 +1,6 @@
 import { staticFile } from "remotion";
 import { getImageDimensions, getVideoMetadata } from "@remotion/media-utils";
-import { FPS } from "./timeline";
+import { FPS, MAX_RATE } from "./timeline";
 
 export type Box = [number, number, number, number]; // x, y, w, h in 1920x1080 clip coordinates
 export type ClipEvent = { t: number; what: string; x?: number; y?: number; box?: Box };
@@ -67,47 +67,92 @@ export function eventsOf(m: Manifest | null, id: string): ClipEvent[] {
     .sort((a, b) => a.t - b.t);
 }
 
+export type Piece = { from: number; to: number }; // seconds in the clip
+
 export type ClipPlan = {
   id: string;
   present: boolean;
   src?: string;
-  trimBefore: number; // frames into the clip
-  rate: number; // playbackRate
-  playable: number; // frames (scene-relative to the clip's appearance) before the clip runs out and freezes
+  rate: number; // playbackRate, <= MAX_RATE
   appearAt: number; // scene frame the clip appears at
-  segStart: number; // seconds into the clip shown at appearAt
-  /** clip time (s) -> scene frame */
-  at: (t: number) => number;
+  /** pieces laid end to end: clip seconds -> scene frames (relative to appearAt) */
+  laid: { from: number; to: number; start: number; frames: number }[];
+  /** frames (relative to appearAt) after which the last frame is held */
+  playable: number;
+  /** clip time (s) -> scene frame, or null if that moment is cut out */
+  at: (t: number) => number | null;
+  /** like at(), but moments before the first piece map to the clip's first frame */
+  atOrStart: (t: number) => number | null;
 };
 
 /**
- * Picks the clip segment for a scene: from 1.5 s before the first event to 3 s after the last one
- * (whole clip when there are no events). If that segment is longer than the time the clip is on
- * screen, it plays faster (up to 3x); if the clip is too short it is shifted earlier and then
- * freezes on its last frame.
+ * Lays the chosen clip pieces end to end in the time the clip is on screen. Plays faster when the
+ * pieces are longer than that, but never more than MAX_RATE; what still does not fit is cut from
+ * the end. A clip that runs out holds its last frame.
  */
-export function planClip(id: string, info: MediaInfo | undefined, events: ClipEvent[], sceneFrames: number, appearAt = 0): ClipPlan {
+export function planPieces(id: string, info: MediaInfo | undefined, pieces: Piece[], sceneFrames: number, appearAt = 0): ClipPlan {
   const visibleSec = (sceneFrames - appearAt) / FPS;
   const dur = info?.present && info.durationSec ? info.durationSec : visibleSec;
-  let segStart = 0;
-  let segEnd = dur;
-  if (events.length) {
-    segStart = Math.max(0, events[0].t - 1.5);
-    segEnd = Math.min(dur, events[events.length - 1].t + 3);
+  const ps = pieces.map((p) => ({ from: Math.max(0, p.from), to: Math.min(dur, p.to) })).filter((p) => p.to > p.from + 0.05);
+  if (!ps.length) ps.push({ from: 0, to: dur });
+  const total = ps.reduce((s, p) => s + p.to - p.from, 0);
+  const rate = Math.min(MAX_RATE, Math.max(1, total / visibleSec));
+  const laid: ClipPlan["laid"] = [];
+  let start = 0;
+  for (const p of ps) {
+    const frames = Math.floor(((p.to - p.from) / rate) * FPS);
+    laid.push({ ...p, start, frames });
+    start += frames;
   }
-  const need = Math.max(0.1, segEnd - segStart);
-  const rate = need > visibleSec ? Math.min(need / visibleSec, 3) : 1;
-  segStart = Math.max(0, Math.min(segStart, dur - visibleSec * rate));
-  const playable = Math.max(1, Math.floor(((dur - segStart) / rate) * FPS) - 2);
-  return {
-    id,
-    present: !!info?.present,
-    src: info?.src,
-    trimBefore: Math.round(segStart * FPS),
-    rate,
-    playable,
-    appearAt,
-    segStart,
-    at: (t: number) => Math.round(appearAt + ((t - segStart) / rate) * FPS),
+  const at = (t: number) => {
+    for (const l of laid) if (t >= l.from && t <= l.to) return Math.round(appearAt + l.start + ((t - l.from) / rate) * FPS);
+    return null;
   };
+  return {
+    id, present: !!info?.present, src: info?.src, rate, appearAt, laid,
+    playable: Math.max(1, start - 1),
+    at,
+    atOrStart: (t: number) => (t < laid[0].from ? appearAt : at(t)),
+  };
+}
+
+const ev = (events: ClipEvent[], re: RegExp) => events.find((e) => re.test(e.what));
+
+/** Which parts of each recording are shown (decided from the manifest events). */
+export function segmentsFor(id: string, events: ClipEvent[], info: MediaInfo | undefined, sceneSec: number): Piece[] {
+  const dur = info?.durationSec ?? 1e9;
+  if (id === "scene1") {
+    // the whole take if it fits at <= MAX_RATE, else from the Send click minus 1 s
+    if (dur / sceneSec <= MAX_RATE) return [{ from: 0, to: dur }];
+    const send = ev(events, /Send invoice/);
+    return [{ from: send ? send.t - 1 : 0, to: dur }];
+  }
+  if (id === "scene3") {
+    // the first ~39 s are the wait for the re-send
+    const toast = ev(events, /toast.*re-sent/);
+    return [{ from: toast ? toast.t - 2.5 : 0, to: dur }];
+  }
+  if (id === "scene2") {
+    const card = ev(events, /card under|card appears/);
+    const closed = [...events].reverse().find((e) => /drawer closed/.test(e.what));
+    return [{ from: card ? card.t - 8 : 0, to: closed ? closed.t + 0.3 : dur }];
+  }
+  if (id === "chat") {
+    // the click, ~4 s of "Kassa is working", then from 1 s before the answer; Activity at the end
+    const click = ev(events, /^click/);
+    const answer = ev(events, /answer appears/);
+    const act = ev(events, /Activity log visible|click Activity/);
+    if (click && answer) {
+      return [
+        { from: Math.max(0, click.t - 1.7), to: click.t + 4 },
+        { from: answer.t - 1, to: act ? act.t + 3.1 : dur },
+      ];
+    }
+  }
+  return [{ from: 0, to: dur }];
+}
+
+/** Kept for the intro and rules clips: the whole clip. */
+export function planClip(id: string, info: MediaInfo | undefined, _events: ClipEvent[], sceneFrames: number, appearAt = 0): ClipPlan {
+  return planPieces(id, info, [{ from: 0, to: info?.durationSec ?? (sceneFrames - appearAt) / FPS }], sceneFrames, appearAt);
 }

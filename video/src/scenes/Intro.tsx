@@ -1,6 +1,6 @@
 import React from "react";
 import { Easing, Sequence, interpolate, useCurrentFrame } from "remotion";
-import { Caption, ClipStage, STD, Stamp, clamp, fadeIn, slideIn } from "../components";
+import { Caption, ClipStage, FULL, Stamp, clamp, fadeIn, slideIn } from "../components";
 import { eventsOf, planClip, type DemoProps } from "../manifest";
 import { C } from "../theme";
 import { sec } from "../timeline";
@@ -58,7 +58,7 @@ export const Intro: React.FC<DemoProps & { frames: number }> = ({ manifest, medi
     <>
       {f >= kassaAt - 6 ? (
         <Sequence from={kassaAt - 6} layout="none">
-          <ClipStage rect={STD} plan={plan} panes={[{ label: "Frappua · Erik's Kassa · Bills to pay", color: C.green }]} opacity={clipO} scale={clipScale} />
+          <ClipStage rect={FULL} plan={plan} panes={[{ label: "Frappua · Erik's Kassa · Bills to pay", color: C.green }]} opacity={clipO} scale={clipScale} />
         </Sequence>
       ) : null}
       {f >= kassaAt - 6 ? <div style={{ position: "absolute", inset: 0, background: `rgba(227,234,224,${0.35 * clipO})` }} /> : null}
