@@ -20,4 +20,5 @@ Shown in the video (hosted demo, PayPal sandbox, nothing mocked in post):
 Built with PayPal Invoicing v2, PayPal Payouts, the invoice record-payment API, FastAPI and an LLM via OpenRouter.
 Entry for the PayPal AI Hackathon 2026. Demo and source: links in the Devpost submission.
 
+Uploaded 21 Oct 2026 to Erik's channel, unlisted: https://youtu.be/UST7GK1FZNI (2:55). Not yet on Devpost.
 Visibility: Unlisted. Audience: not made for kids. No music (synthetic voice-over only).
