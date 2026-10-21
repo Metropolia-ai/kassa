@@ -1,0 +1,147 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Kassa × Kassa — how one invoice gets settled</title>
+<style>
+  @font-face { font-family:"Schibsted Grotesk"; font-weight:400 900; src:url("../../video/public/fonts/SchibstedGrotesk-latin.woff2") format("woff2"); }
+  @font-face { font-family:"Schibsted Grotesk"; font-weight:400 900; src:url("../../video/public/fonts/SchibstedGrotesk-latin-ext.woff2") format("woff2"); unicode-range:U+0100-024F, U+1E00-1EFF; }
+  :root { --paper:#E3EAE0; --sheet:#F0F4EE; --ink:#1B2A3F; --pencil:#56645E; --green:#1F6B45; --red:#B42318; --amber:#855700; --purple:#5B3A8C; --rule:#C9D3C6; }
+  * { box-sizing:border-box; margin:0; padding:0; }
+  html, body { width:1800px; height:1200px; overflow:hidden; }
+  body { background:var(--paper); color:var(--ink); font-family:"Schibsted Grotesk", "Helvetica Neue", Arial, sans-serif; font-size:22px; line-height:1.3; position:relative; }
+  .abs { position:absolute; }
+  h1 { position:absolute; left:50px; top:38px; font-size:46px; font-weight:800; letter-spacing:-0.5px; }
+  .sub { position:absolute; left:52px; top:100px; font-size:24px; color:var(--pencil); }
+  svg.wires { position:absolute; left:0; top:0; width:1800px; height:1200px; }
+  .box { position:absolute; background:var(--sheet); border:3px solid var(--ink); border-radius:10px; box-shadow:0 6px 0 rgba(27,42,63,.10); }
+  .co { width:460px; top:170px; height:520px; padding:22px 24px; }
+  .co.pf { left:50px; border-color:var(--purple); }
+  .co.fr { left:1290px; border-color:var(--green); }
+  .co .name { font-size:32px; font-weight:800; line-height:1.1; }
+  .co.pf .name { color:var(--purple); }
+  .co.fr .name { color:var(--green); }
+  .co .role { font-size:22px; color:var(--pencil); margin-top:6px; }
+  .co ul { list-style:none; margin-top:20px; }
+  .co li { border-top:2px solid var(--rule); padding:14px 0 14px; }
+  .co li b { display:block; font-size:26px; font-weight:700; }
+  .co li span { font-size:22px; color:var(--pencil); }
+  .engine { left:590px; top:170px; width:620px; height:520px; padding:22px 26px; border-color:var(--ink); }
+  .engine .name { font-size:32px; font-weight:800; line-height:1.1; }
+  .engine .role { font-size:22px; color:var(--pencil); margin-top:6px; }
+  .engine .lbl { font-size:22px; font-weight:700; margin-top:22px; color:var(--ink); }
+  .flow { display:flex; flex-wrap:wrap; align-items:center; gap:10px 8px; margin-top:12px; }
+  .st { font-size:22px; font-weight:600; padding:5px 12px; border:2px solid var(--ink); border-radius:999px; background:#FAFBF8; }
+  .st.ok { border-color:var(--green); color:var(--green); }
+  .st.warn { border-color:var(--amber); color:var(--amber); }
+  .st.end { border-color:var(--red); color:var(--red); }
+  .ar { font-family:"DejaVu Sans", sans-serif; font-size:26px; line-height:1; color:var(--pencil); font-weight:700; }
+  .side { margin-top:20px; display:flex; flex-direction:column; gap:12px; }
+  .side div { font-size:22px; color:var(--ink); display:grid; grid-template-columns:auto 1fr; align-items:center; column-gap:12px; }
+  .side .st { justify-self:start; }
+  .wl { position:absolute; font-size:22px; color:var(--pencil); text-align:center; width:80px; }
+  .bus { position:absolute; left:50px; top:742px; font-size:22px; font-weight:700; color:var(--pencil); background:var(--paper); padding:0 10px 0 0; }
+  .svc { top:790px; width:400px; height:210px; padding:18px 20px; border-color:var(--pencil); border-width:2px; }
+  .svc b { display:block; font-size:26px; font-weight:800; margin-bottom:6px; }
+  .svc span { font-size:22px; color:var(--ink); }
+  .svc small { display:block; font-size:22px; color:var(--pencil); margin-top:4px; }
+  .legend { position:absolute; left:50px; top:1046px; width:1700px; padding:18px 24px; border:2px dashed var(--pencil); border-radius:10px; font-size:24px; color:var(--ink); }
+  .legend b { font-weight:800; }
+  .legend .live { color:var(--green); }
+  .legend .seed { color:var(--amber); }
+</style>
+</head>
+<body>
+<h1>Kassa × Kassa — how one invoice gets settled</h1>
+<div class="sub">Two companies, two bookkeepers, one PayPal invoice. The owners' rules decide; the model only writes the words.</div>
+
+<svg class="wires" viewBox="0 0 1800 1200" aria-hidden="true">
+  <defs>
+    <marker id="ah" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="9" markerHeight="9" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#1B2A3F"/></marker>
+  </defs>
+  <!-- Pixelforge <-> engine -->
+  <line x1="514" y1="390" x2="584" y2="390" stroke="#1B2A3F" stroke-width="3" marker-end="url(#ah)"/>
+  <line x1="584" y1="470" x2="514" y2="470" stroke="#1B2A3F" stroke-width="3" marker-end="url(#ah)"/>
+  <!-- engine <-> Frappua -->
+  <line x1="1216" y1="390" x2="1286" y2="390" stroke="#1B2A3F" stroke-width="3" marker-end="url(#ah)"/>
+  <line x1="1286" y1="470" x2="1216" y2="470" stroke="#1B2A3F" stroke-width="3" marker-end="url(#ah)"/>
+  <!-- shared services bus -->
+  <g stroke="#56645E" stroke-width="2.5" stroke-dasharray="9 7" fill="none">
+    <line x1="280" y1="694" x2="280" y2="756"/>
+    <line x1="900" y1="694" x2="900" y2="756"/>
+    <line x1="1520" y1="694" x2="1520" y2="756"/>
+    <line x1="250" y1="756" x2="1550" y2="756"/>
+    <line x1="250" y1="756" x2="250" y2="788"/>
+    <line x1="683" y1="756" x2="683" y2="788"/>
+    <line x1="1117" y1="756" x2="1117" y2="788"/>
+    <line x1="1550" y1="756" x2="1550" y2="788"/>
+  </g>
+</svg>
+
+<div class="wl" style="left:510px; top:404px;">says</div>
+<div class="wl" style="left:1210px; top:404px;">says</div>
+
+<div class="box co pf">
+  <div class="name">Pixelforge Oy</div>
+  <div class="role">Mika's Kassa · the supplier</div>
+  <ul>
+    <li><b>Policy</b><span>(the rules decide)</span></li>
+    <li><b>Store</b><span>(own Postgres schema)</span></li>
+    <li><b>PayPal client</b><span>its own sandbox account</span></li>
+    <li><b>Voice</b><span>(LLM writes the words)</span></li>
+  </ul>
+</div>
+
+<div class="box engine">
+  <div class="name">Kassa × Kassa engine</div>
+  <div class="role">one thread per invoice; each side moves only on its turn</div>
+  <div class="lbl">Thread state machine</div>
+  <div class="flow">
+    <span class="st">new</span><span class="ar">→</span>
+    <span class="st">invoiced</span><span class="ar">→</span>
+    <span class="st">disputed</span><span class="ar">→</span>
+    <span class="st">answered</span><span class="ar">→</span>
+    <span class="st">agreed</span><span class="ar">→</span>
+    <span class="st">ready</span><span class="ar">→</span>
+    <span class="st">paid</span><span class="ar">→</span>
+    <span class="st ok">settled</span>
+  </div>
+  <div class="side">
+    <div><span class="st warn">needs_humans</span><span>gap beyond an owner's limit: a card under "Needs you"</span></div>
+    <div><span class="st end">closed</span><span>withdrawn or refused, e.g. a duplicate</span></div>
+  </div>
+</div>
+
+<div class="box co fr">
+  <div class="name">Frappua</div>
+  <div class="role">Erik's Kassa · the buyer</div>
+  <ul>
+    <li><b>Policy</b><span>(the rules decide)</span></li>
+    <li><b>Store</b><span>(own Postgres schema)</span></li>
+    <li><b>PayPal client</b><span>its own sandbox account</span></li>
+    <li><b>Voice</b><span>(LLM writes the words)</span></li>
+  </ul>
+</div>
+
+<div class="bus">Shared services</div>
+
+<div class="box svc" style="left:50px;">
+  <b>PayPal sandbox</b>
+  <span>Invoicing v2 (create, cancel, record payment), Payouts v1</span>
+</div>
+<div class="box svc" style="left:483px;">
+  <b>OpenRouter LLM</b>
+  <span>gpt-6.1-sol chat,<br>gpt-6-luna extract</span>
+</div>
+<div class="box svc" style="left:917px;">
+  <b>Neon Postgres</b>
+  <span>schema per company + shared duet schema</span>
+</div>
+<div class="box svc" style="left:1350px;">
+  <b>Vercel</b>
+  <span>FastAPI serverless + daily cron</span>
+</div>
+
+<div class="legend"><b class="live">Live:</b> everything above. &nbsp; <b class="seed">Seeded:</b> two months of history, the supplier's work log, the purchase orders.</div>
+</body>
+</html>

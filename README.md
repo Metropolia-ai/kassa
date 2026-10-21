@@ -2,11 +2,11 @@
 
 Supplier bills come in by email. Kassa reads them, checks them against a payment policy, asks a human only when the policy says so, pays through **PayPal Payouts**, bills customers through **PayPal Invoicing**, and writes every action to an audit log with the reason the agent gave.
 
-Built for the [PayPal AI Hackathon 2026](https://paypal-ai-hackathon.devpost.com). MIT licensed.
+Built for the [PayPal AI Hackathon 2026](https://paypalaihackathon.devpost.com). MIT licensed.
 
 ## What it does
 1. **Inbox.** Drop supplier invoices as text, `.eml` or `.pdf` (or load the sample inbox).
-2. **Extraction.** Claude (tool use, forced schema) pulls supplier, PayPal email, invoice number, dates, total, currency, line items and a confidence score. Without an API key a rule-based extractor runs, so the app works end to end in demo mode.
+2. **Extraction.** The language model (tool use, forced schema) pulls supplier, PayPal email, invoice number, dates, total, currency, line items and a confidence score. Without an API key a rule-based extractor runs, so the app works end to end in demo mode.
 3. **Policy.** Duplicates are rejected. Unknown suppliers, amounts above the auto-pay limit, missing data, past due dates and low confidence go to the **approval queue** with a written reason. Everything else is approved automatically.
 4. **Pay.** Approved bills are paid with the PayPal Payouts API; batch id and item status are tracked and refreshed.
 5. **Bill.** From chat ("invoice Fläkt pilot 15000 EUR to buyer@example.com, due 14 days") the agent creates and sends a PayPal invoice and shows the payer link.
