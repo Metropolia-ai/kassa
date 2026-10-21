@@ -49,13 +49,16 @@ export const PaperWipe: React.FC<{ frames: number; wipeIn?: boolean; wipeOut?: b
 
 /* ---------- stamp ---------- */
 
+/** A stamp is a verdict, not a label: it lands, stays this long, then lifts so the screen is readable again. */
+export const STAMP_LIFE = sec(3.5);
+
 export const Stamp: React.FC<{
   at: number; text: string; sub?: string; color?: string; size?: number; rotate?: number;
   x: number; y: number; // centre on screen
   hideAt?: number;
-}> = ({ at, text, sub, color = C.green, size = 110, rotate = -4, x, y, hideAt }) => {
+}> = ({ at, text, sub, color = C.green, size = 110, rotate = -4, x, y, hideAt = at + STAMP_LIFE }) => {
   const f = useCurrentFrame() - at;
-  if (f < 0) return null;
+  if (f < 0 || f + at > hideAt + 10) return null;
   const d = sec(0.35);
   const p = interpolate(f, [0, d], [0, 1], { ...clamp, easing: Easing.bezier(0.2, 0.9, 0.3, 1.15) });
   const scale = interpolate(p, [0, 1], [1.6, 1]);

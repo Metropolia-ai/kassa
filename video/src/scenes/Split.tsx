@@ -71,7 +71,7 @@ export const Scene1: React.FC<DemoProps & { frames: number }> = (p) => (
       const stampAt = clampAt((fin ? at(fin.t) : null) ?? sec(31.3), p.frames);
       return (
         <>
-          <Stamp at={stampAt} text="Settled" sub={`${num} s · 0 PEOPLE`} color={C.green} size={120} x={LEFT_CX + 20} y={FULL.y + 270} />
+          <Stamp at={stampAt} text="Settled" sub={`${num} s · 0 PEOPLE`} color={C.green} size={104} x={LEFT_CX + 20} y={FULL.y + 215} />
           <Pip at={p.frames - PIP_FRAMES} info={p.media["paypal-paid"]} id="paypal-paid" cx={RIGHT_CX - 20} cy={MID_Y} w={900} label="PayPal sandbox · invoice paid" />
         </>
       );
@@ -86,7 +86,7 @@ export const Scene3: React.FC<DemoProps & { frames: number }> = (p) => (
       const stampAt = clampAt((w ? at(w.t) : null) ?? sec(13.3), p.frames);
       return (
         <>
-          <Stamp at={stampAt} text="Withdrawn" sub="0 PEOPLE" color={C.red} size={110} x={RIGHT_CX} y={FULL.y + FULL.h * 0.76} />
+          <Stamp at={stampAt} text="Withdrawn" sub="0 PEOPLE" color={C.red} size={96} x={RIGHT_CX} y={FULL.y + FULL.h * 0.8} />
           <Pip at={p.frames - PIP_FRAMES} info={p.media["paypal-cancelled"]} id="paypal-cancelled" cx={LEFT_CX + 20} cy={MID_Y - 40} w={900} label="PayPal sandbox · invoice cancelled" />
         </>
       );
@@ -104,7 +104,7 @@ export const Scene2: React.FC<DemoProps & { frames: number }> = (p) => (
       return (
         <>
           <Stamp at={turnAt} text="Your turn" color={C.amber} size={92} x={RIGHT_CX} y={FULL.y + FULL.h * 0.74} hideAt={turnAt + sec(4)} />
-          <Stamp at={paidAt} text="Paid" sub="1 decision by a person" color={C.green} size={130} x={LEFT_CX + 40} y={MID_Y - 60} />
+          <Stamp at={paidAt} text="Paid" sub="1 decision by a person" color={C.green} size={104} x={LEFT_CX + 60} y={FULL.y + 215} />
         </>
       );
     }}

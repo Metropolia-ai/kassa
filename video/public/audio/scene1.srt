@@ -19,10 +19,10 @@ Pixelforge's bookkeeper answers from its work log: the extra ten hours were orde
 That is inside Erik's limit for documented changes, so it pays by PayPal Payout, and Pixelforge's bookkeeper records the payment.
 
 6
-00:00:31,339 --> 00:00:33,576
-Fourteen seconds.
+00:00:31,339 --> 00:00:33,734
+Twenty-five seconds.
 
 7
-00:00:33,576 --> 00:00:35,931
+00:00:33,734 --> 00:00:36,089
 Nobody was interrupted.
 
