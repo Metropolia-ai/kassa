@@ -7,3 +7,5 @@ __pycache__/
 .pytest_cache/
 .vercel
 .env*
+.env.duet
+.vercel-duet/

@@ -1,0 +1,28 @@
+1
+00:00:00,100 --> 00:00:02,994
+Pixelforge also runs Kassa.
+
+2
+00:00:02,944 --> 00:00:07,773
+Mika sends the October invoice: a real PayPal invoice.
+
+3
+00:00:07,773 --> 00:00:13,405
+Frappua's bookkeeper finds fifty hours where the order said forty, and asks.
+
+4
+00:00:13,405 --> 00:00:22,431
+Pixelforge's bookkeeper answers from its work log: the extra ten hours were ordered by Frappua's own producer, by e-mail, on the twelfth.
+
+5
+00:00:22,431 --> 00:00:31,339
+That is inside Erik's limit for documented changes, so it pays by PayPal Payout, and Pixelforge's bookkeeper records the payment.
+
+6
+00:00:31,339 --> 00:00:33,734
+Twenty-five seconds.
+
+7
+00:00:33,734 --> 00:00:36,089
+Nobody was interrupted.
+

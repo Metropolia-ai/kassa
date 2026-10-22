@@ -1,0 +1,319 @@
+{
+  "recorded_at": "2026-10-20T15:07:00Z",
+  "clips": [
+    {
+      "id": "intro",
+      "file": "intro.mp4",
+      "layout": "single",
+      "company": "frappua",
+      "duration": 8.67,
+      "events": [
+        {
+          "t": 0.0,
+          "what": "page loaded, bills visible: two months of bills, all Paid, Needs you empty"
+        }
+      ]
+    },
+    {
+      "id": "limits",
+      "file": "limits.mp4",
+      "layout": "single",
+      "company": "frappua",
+      "duration": 10.63,
+      "events": [
+        {
+          "t": 1.58,
+          "what": "click Agent limits",
+          "x": 1092,
+          "y": 47
+        },
+        {
+          "t": 1.63,
+          "what": "dialog open: 10 % over, never more than 150 EUR, 25 % if ordered in writing"
+        },
+        {
+          "t": 7.88,
+          "what": "click Close",
+          "x": 1309,
+          "y": 416
+        },
+        {
+          "t": 7.93,
+          "what": "dialog closed, Needs you empty"
+        }
+      ]
+    },
+    {
+      "id": "scene1",
+      "file": "scene1.mp4",
+      "layout": "split",
+      "duration": 50.97,
+      "invoice": "PF-2026-0440",
+      "events": [
+        {
+          "t": 6.34,
+          "what": "click Send invoice on 'October render, first half: 50 h' (left)",
+          "x": 92,
+          "y": 572
+        },
+        {
+          "t": 12.16,
+          "what": "toast Invoice PF-2026-0440 sent to Frappua; row Being checked (left)"
+        },
+        {
+          "t": 12.17,
+          "what": "toast New bill from Pixelforge Oy: 337.00 (right)"
+        },
+        {
+          "t": 19.35,
+          "what": "row Checking (right); toast your bookkeeper asked"
+        },
+        {
+          "t": 21.56,
+          "what": "click bill row (right)",
+          "x": 1056,
+          "y": 516
+        },
+        {
+          "t": 21.56,
+          "what": "drawer open: agreed vs invoiced table, messages sent the invoice + asked"
+        },
+        {
+          "t": 23.88,
+          "what": "message: explained (10 h re-render, approved by Alena Mima by e-mail 12 Oct 09:41)"
+        },
+        {
+          "t": 30.23,
+          "what": "drawer scrolls to follow the messages"
+        },
+        {
+          "t": 30.24,
+          "what": "message: agreed"
+        },
+        {
+          "t": 37.37,
+          "what": "message: paid (PayPal payout)"
+        },
+        {
+          "t": 38.15,
+          "what": "row Paid, recording (left)"
+        },
+        {
+          "t": 42.56,
+          "what": "message: confirmed, outcome line 'Settled by the agents in 25 s, no one interrupted.'"
+        },
+        {
+          "t": 42.59,
+          "what": "toast Settled ... received from Frappua; row Paid, payout pending (left)"
+        },
+        {
+          "t": 47.73,
+          "what": "drawer closed (Esc key, no click)"
+        }
+      ]
+    },
+    {
+      "id": "scene3",
+      "file": "scene3.mp4",
+      "layout": "split",
+      "duration": 60.47,
+      "invoice": "PF-2026-0441",
+      "note": "recorded right after scene1; 0-39 s is the wait for the re-send (trim)",
+      "events": [
+        {
+          "t": 10.53,
+          "what": "PF-2026-0440 row Paid, payout success (left)"
+        },
+        {
+          "t": 12.04,
+          "what": "PF-2026-0440 row Paid (right)"
+        },
+        {
+          "t": 39.0,
+          "what": "re-sent PF-2026-0441 appears (left), Draft then Sent at 40.5"
+        },
+        {
+          "t": 43.63,
+          "what": "toast Another bill from Pixelforge Oy, 337.00, re-sent by their system (right)"
+        },
+        {
+          "t": 43.96,
+          "what": "row Being checked (left)"
+        },
+        {
+          "t": 46.94,
+          "what": "row Checking (right); toast your bookkeeper asked"
+        },
+        {
+          "t": 52.29,
+          "what": "toast Duplicate of PF-2026-0440, withdrawn by Pixelforge Oy's agent in 3 s (right)"
+        },
+        {
+          "t": 52.3,
+          "what": "row Refused: withdrawn by Pixelforge Oy, same work as PF-2026-0440, already marked as paid (right)"
+        },
+        {
+          "t": 53.91,
+          "what": "row Withdrawn + toast (left)"
+        }
+      ]
+    },
+    {
+      "id": "scene2",
+      "file": "scene2.mp4",
+      "layout": "split",
+      "duration": 79.47,
+      "invoice": "PF-2026-0442 / PF-2026-0442R",
+      "events": [
+        {
+          "t": 6.37,
+          "what": "click Send invoice on 'Character animation, 2 scenes' (left)",
+          "x": 92,
+          "y": 572
+        },
+        {
+          "t": 12.1,
+          "what": "toast Invoice PF-2026-0442 sent; row Being checked (left)"
+        },
+        {
+          "t": 19.35,
+          "what": "row Checking (right)"
+        },
+        {
+          "t": 39.34,
+          "what": "row On hold, waiting for Frappua's owner (left)"
+        },
+        {
+          "t": 39.45,
+          "what": "card under Needs you (right): Pixelforge Oy wants 1 800.00 EUR, the agent may go to 1 320.00 EUR"
+        },
+        {
+          "t": 43.87,
+          "what": "click Pay 1 800.00 EUR as asked (right)",
+          "x": 1101,
+          "y": 410
+        },
+        {
+          "t": 45.02,
+          "what": "toast Your bookkeeper offers 1,800.00 and finishes the paperwork (right); card gone"
+        },
+        {
+          "t": 50.69,
+          "what": "reissued PF-2026-0442R 1,800.00 appears (left)"
+        },
+        {
+          "t": 53.07,
+          "what": "old PF-2026-0442 Withdrawn, reissued Being checked (left)"
+        },
+        {
+          "t": 58.48,
+          "what": "row PF-2026-0442R 1,800.00 (right), PayPal payout pending"
+        },
+        {
+          "t": 60.11,
+          "what": "PF-2026-0442R Paid, recording (left)"
+        },
+        {
+          "t": 63.44,
+          "what": "toast Settled in 47 s after the owner decided: 1,800.00 paid (right)"
+        },
+        {
+          "t": 65.0,
+          "what": "toast + row Paid, payout pending (left)"
+        },
+        {
+          "t": 70.47,
+          "what": "click bill row (right)",
+          "x": 1056,
+          "y": 516
+        },
+        {
+          "t": 70.49,
+          "what": "drawer open (right)"
+        },
+        {
+          "t": 73.0,
+          "what": "drawer scrolled to the end: Erik's decision, reissue, paid, confirmed, Settled"
+        },
+        {
+          "t": 78.09,
+          "what": "drawer closed (Esc key, no click)"
+        }
+      ]
+    },
+    {
+      "id": "chat",
+      "file": "chat.mp4",
+      "layout": "single",
+      "company": "frappua",
+      "duration": 29.83,
+      "events": [
+        {
+          "t": 2.72,
+          "what": "click suggestion 'Why did we pay Pixelforge Oy more than we agreed?'",
+          "x": 1720,
+          "y": 946
+        },
+        {
+          "t": 2.87,
+          "what": "question shown, Kassa is working"
+        },
+        {
+          "t": 16.54,
+          "what": "answer appears: 1,800 vs 1,200 order (Erik's decision); 337 vs 272 order (Alena Mima e-mail 12 Oct 09:41, 25 % rule); duplicate PF-2026-0441 not paid"
+        },
+        {
+          "t": 24.86,
+          "what": "click Activity tab",
+          "x": 335,
+          "y": 335
+        },
+        {
+          "t": 24.9,
+          "what": "Activity log visible"
+        }
+      ]
+    },
+    {
+      "id": "paypal-paid",
+      "file": "paypal-paid.png",
+      "layout": "still",
+      "invoice": "PF-2026-0440",
+      "what": "PayPal sandbox invoice page, Paid, total paid 337.00"
+    },
+    {
+      "id": "paypal-cancelled",
+      "file": "paypal-cancelled.png",
+      "layout": "still",
+      "invoice": "PF-2026-0441",
+      "what": "PayPal sandbox invoice page, 'This invoice was canceled.'"
+    },
+    {
+      "id": "drawer",
+      "file": "drawer.png",
+      "layout": "still",
+      "company": "frappua",
+      "what": "PF-2026-0440 drawer at 1920, scrolled to the conversation and Settled outcome"
+    },
+    {
+      "id": "drawer-top",
+      "file": "drawer-top.png",
+      "layout": "still",
+      "company": "frappua",
+      "what": "PF-2026-0440 drawer at 1920, top: status Paid, why, payout, agreed vs invoiced table"
+    },
+    {
+      "id": "drawer-duplicate",
+      "file": "drawer-duplicate.png",
+      "layout": "still",
+      "company": "frappua",
+      "what": "PF-2026-0441 drawer: duplicate asked, withdrawn, Withdrawn outcome"
+    },
+    {
+      "id": "card",
+      "file": "card.png",
+      "layout": "still",
+      "what": "split view, decision card under Needs you (right)"
+    }
+  ]
+}

@@ -2,11 +2,11 @@
 
 Supplier bills come in by email. Kassa reads them, checks them against a payment policy, asks a human only when the policy says so, pays through **PayPal Payouts**, bills customers through **PayPal Invoicing**, and writes every action to an audit log with the reason the agent gave.
 
-Built for the [PayPal AI Hackathon 2026](https://paypal-ai-hackathon.devpost.com). MIT licensed.
+Built for the [PayPal AI Hackathon 2026](https://paypalaihackathon.devpost.com). MIT licensed.
 
 ## What it does
 1. **Inbox.** Drop supplier invoices as text, `.eml` or `.pdf` (or load the sample inbox).
-2. **Extraction.** Claude (tool use, forced schema) pulls supplier, PayPal email, invoice number, dates, total, currency, line items and a confidence score. Without an API key a rule-based extractor runs, so the app works end to end in demo mode.
+2. **Extraction.** The language model (tool use, forced schema) pulls supplier, PayPal email, invoice number, dates, total, currency, line items and a confidence score. Without an API key a rule-based extractor runs, so the app works end to end in demo mode.
 3. **Policy.** Duplicates are rejected. Unknown suppliers, amounts above the auto-pay limit, missing data, past due dates and low confidence go to the **approval queue** with a written reason. Everything else is approved automatically.
 4. **Pay.** Approved bills are paid with the PayPal Payouts API; batch id and item status are tracked and refreshed.
 5. **Bill.** From chat ("invoice Fläkt pilot 15000 EUR to buyer@example.com, due 14 days") the agent creates and sends a PayPal invoice and shows the payer link.
@@ -33,6 +33,30 @@ The hosted demo is gated: the page asks for an access key once and stores it in 
 3. In the queue, approve Nordic Voice with "trust supplier" and pay it; reject the fake wire.
 4. **Load sample invoices** sends three customer invoices through PayPal Invoicing, or use **New invoice** or chat: `invoice Acme acme@example.com 1500 EUR for the pilot`. Open the link to see the PayPal payment page.
 5. Audit log shows each step and the one refusal (agent tried to pay an unapproved bill).
+
+## Kassa × Kassa: two companies' bookkeepers settle with each other
+
+The same app has a second mode. Two companies run in one deployment, each with its own Kassa, PayPal
+account and books, and the page shows one company at a time (`/?co=frappua`, `/?co=pixelforge`). The
+supplier's owner presses "Send invoice"; the invoice goes out through PayPal Invoicing; the buyer's
+bookkeeper checks it against what was agreed, asks about the difference, the two settle it within the
+limits their owners set, the buyer pays by Payout and the supplier records the payment on the invoice.
+When the gap is bigger than an owner allowed, that owner gets a card under "Needs you" and decides in one
+click; the bookkeepers finish the paperwork. Click any bill or invoice to read what the two said.
+
+Policy decides, the model only writes the words: `app/duet.py` works out which action each owner's policy
+allows, the language model phrases the message. Without a model key the agents speak in plain templates.
+The other company's bookkeeper is visible only inside a bill's thread, never its settings.
+
+Three invoices wait on the supplier's side (`samples/duet/scenarios.json`): extra hours ordered in writing
+(settled by the bookkeepers alone), a second scene agreed only in a call (the owners decide), the same work
+invoiced twice under a new number (refused and withdrawn, nobody looks). Two months of ordinary bills are
+seeded so the books do not look newborn.
+
+Run it locally with `DUET=1` and two companies in the environment (see `.env.example`, prefixes `CO_A_`
+and `CO_B_`), then open `/?co=frappua`. The single-company dashboard stays at `/solo`. Routes are under
+`/api/duet/companies/{co}/...`; `POST /api/duet/tick` moves the bookkeepers along and is called by
+whichever window is open. The UX plan is in `docs/ux-plan-duet.md`.
 
 ## Stack
 Python 3.12 · FastAPI · SQLite locally, Postgres (Neon) on Vercel · httpx · LLM with function calling via OpenRouter/OpenAI-compatible API or Anthropic · AG Grid Community for the three tables · PayPal REST (OAuth2, Payouts v1, Invoicing v2).

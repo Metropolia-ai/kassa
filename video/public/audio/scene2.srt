@@ -1,0 +1,20 @@
+1
+00:00:00,100 --> 00:00:06,863
+The second invoice is double the order: a second scene, agreed only in a call, nothing in writing.
+
+2
+00:00:06,813 --> 00:00:11,063
+The two bookkeepers go as far as their owners allowed and stop.
+
+3
+00:00:11,063 --> 00:00:14,418
+Erik gets a card with the numbers and one click.
+
+4
+00:00:14,418 --> 00:00:16,839
+He pays eighteen hundred.
+
+5
+00:00:16,839 --> 00:00:24,300
+Pixelforge's bookkeeper reissues the invoice for the agreed amount, Frappua's pays it, PayPal confirms.
+

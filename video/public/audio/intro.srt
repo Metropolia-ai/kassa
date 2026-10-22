@@ -1,0 +1,16 @@
+1
+00:00:00,100 --> 00:00:11,573
+Every small company has the same unpaid job: someone reads each supplier invoice, checks it against what was agreed, chases the supplier about the difference, and only then pays.
+
+2
+00:00:11,523 --> 00:00:16,628
+Benchmarks put that at about two weeks and ten dollars of work per invoice.
+
+3
+00:00:16,628 --> 00:00:18,497
+This is Kassa.
+
+4
+00:00:18,497 --> 00:00:21,471
+It does that job, on PayPal.
+

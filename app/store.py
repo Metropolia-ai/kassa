@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import os
+import re
 import sqlite3
 import threading
 from datetime import datetime, timezone
@@ -67,32 +68,49 @@ def now() -> str:
 class _DB:
     """Minimal uniform layer: execute(sql, params) with '?' placeholders, rows as dicts, autocommit."""
 
-    def __init__(self, path: str):
-        # Prefer a direct connection: Neon's pooled URL shares server sessions between callers, and a
-        # session that once ran SET search_path keeps it for everyone, so tables can land in the wrong schema.
-        self.url = os.environ.get("DATABASE_URL_UNPOOLED") or os.environ.get("DATABASE_URL")
+    def __init__(self, path: str, schema: str | None = None, ddl: str = SCHEMA):
+        """schema: a namespace so several companies can share one database. Postgres: a schema with its own
+        search_path. SQLite: a separate file next to `path`."""
+        self.url = os.environ.get("DATABASE_URL")
+        if schema and not re.fullmatch(r"[a-z_][a-z0-9_]*", schema):
+            raise ValueError(f"bad schema name {schema!r}")
+        if os.environ.get("DATABASE_URL_UNPOOLED"):
+            # Schemas are selected with SET search_path, which only sticks on a real session. Pooled URLs
+            # (Neon's PgBouncer in transaction mode) hand statements to shared sessions, and a session that
+            # once ran SET keeps it for everyone. So when a direct URL is available, every store uses it.
+            self.url = os.environ["DATABASE_URL_UNPOOLED"]
         if self.url:
             import psycopg
             from psycopg.rows import dict_row
             self.pg = True
             self.conn = psycopg.connect(self.url, autocommit=True, row_factory=dict_row)
-            schema = SCHEMA.replace("INTEGER PRIMARY KEY AUTOINCREMENT", "SERIAL PRIMARY KEY")
+            schema_sql = ddl.replace("INTEGER PRIMARY KEY AUTOINCREMENT", "SERIAL PRIMARY KEY")
             with self.conn.cursor() as cur:
-                cur.execute("SET search_path TO public")
-                for stmt in schema.split(";"):
+                if schema:
+                    cur.execute(f"CREATE SCHEMA IF NOT EXISTS {schema}")
+                cur.execute(f"SET search_path TO {schema or 'public'}")
+                cur.execute("SHOW search_path")
+                if (schema or "public") not in cur.fetchone()["search_path"]:
+                    raise RuntimeError(f"could not select schema {schema or 'public'}; use a direct (unpooled) DATABASE_URL")
+                for stmt in schema_sql.split(";"):
                     if stmt.strip():
                         cur.execute(stmt)
-                for col in ("risk_level", "risk_signals"):
-                    cur.execute(f"ALTER TABLE bills ADD COLUMN IF NOT EXISTS {col} TEXT")
+                if "bills" in ddl:
+                    for col in ("risk_level", "risk_signals"):
+                        cur.execute(f"ALTER TABLE bills ADD COLUMN IF NOT EXISTS {col} TEXT")
         else:
             self.pg = False
+            if schema and path != ":memory:":
+                root, ext = os.path.splitext(path)
+                path = f"{root}.{schema}{ext or '.db'}"
             self.conn = sqlite3.connect(path, check_same_thread=False, isolation_level=None)
             self.conn.row_factory = sqlite3.Row
-            self.conn.executescript(SCHEMA)
-            have = {r[1] for r in self.conn.execute("PRAGMA table_info(bills)").fetchall()}
-            for col in ("risk_level", "risk_signals"):
-                if col not in have:
-                    self.conn.execute(f"ALTER TABLE bills ADD COLUMN {col} TEXT")
+            self.conn.executescript(ddl)
+            if "bills" in ddl:
+                have = {r[1] for r in self.conn.execute("PRAGMA table_info(bills)").fetchall()}
+                for col in ("risk_level", "risk_signals"):
+                    if col not in have:
+                        self.conn.execute(f"ALTER TABLE bills ADD COLUMN {col} TEXT")
 
     def execute(self, sql: str, params: tuple = ()):
         if self.pg:
@@ -110,10 +128,11 @@ class _DB:
 
 
 class Store:
-    def __init__(self, path: str):
+    def __init__(self, path: str, schema: str | None = None):
         self.path = path
+        self.schema = schema
         self._lock = threading.Lock()
-        self.db = _DB(path)
+        self.db = _DB(path, schema)
 
     # --- bills -------------------------------------------------------------
     def add_bill(self, source: str, raw_text: str) -> int:
@@ -142,6 +161,11 @@ class Store:
             rows = self.db.execute("SELECT * FROM bills ORDER BY id DESC").fetchall()
         return [_bill(r) for r in rows]
 
+    def find_bill_by_invoice(self, supplier_email: str | None, invoice_number: str | None) -> dict | None:
+        row = self.db.execute("SELECT * FROM bills WHERE invoice_number=? AND COALESCE(supplier_email,'')=COALESCE(?,'') "
+                              "ORDER BY id DESC LIMIT 1", (invoice_number, supplier_email)).fetchone()
+        return _bill(row) if row else None
+
     def find_duplicate(self, supplier_email: str | None, invoice_number: str | None, exclude_id: int) -> dict | None:
         if not invoice_number:
             return None
@@ -149,6 +173,17 @@ class Store:
             "SELECT * FROM bills WHERE invoice_number=? AND COALESCE(supplier_email,'')=COALESCE(?,'') "
             "AND id<>? AND status<>'rejected' ORDER BY id LIMIT 1",
             (invoice_number, supplier_email, exclude_id)).fetchone()
+        return _bill(row) if row else None
+
+    def find_similar(self, supplier_email: str | None, amount: float | None, exclude_id: int, days: int = 30) -> dict | None:
+        """Same supplier, same amount, not long ago, not refused: a second invoice for the same work under a new number."""
+        if not supplier_email or not amount:
+            return None
+        from datetime import datetime, timedelta, timezone
+        since = (datetime.now(timezone.utc) - timedelta(days=days)).isoformat(timespec="seconds")
+        row = self.db.execute(
+            "SELECT * FROM bills WHERE supplier_email=? AND ABS(amount-?)<0.005 AND id<>? AND created_at>=? "
+            "AND status NOT IN ('rejected','failed') ORDER BY id LIMIT 1", (supplier_email.lower(), amount, exclude_id, since)).fetchone()
         return _bill(row) if row else None
 
     # --- suppliers ---------------------------------------------------------

@@ -1,0 +1,5 @@
+node_modules/
+out/
+clips/*.mp4
+clips/*.png
+public/clips

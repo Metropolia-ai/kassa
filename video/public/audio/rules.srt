@@ -1,0 +1,20 @@
+1
+00:00:00,100 --> 00:00:02,955
+Kassa is an AI bookkeeper.
+
+2
+00:00:02,905 --> 00:00:07,142
+You tell it, in three sentences, what it may do alone.
+
+3
+00:00:07,142 --> 00:00:11,286
+Inside those limits it pays through PayPal Payouts.
+
+4
+00:00:11,286 --> 00:00:14,694
+Outside them it brings the bill to you with the reason.
+
+5
+00:00:14,694 --> 00:00:19,707
+Every decision is made by your rules; the model only writes the words.
+
