@@ -1,7 +1,7 @@
 # Devpost submission: Kassa (PayPal AI Hackathon 2026)
 
 Draft project on Devpost: https://devpost.com/submit-to/31302-paypal-ai-hackathon/manage/submissions/1251813-kassa
-(Erik's account). Status: draft, not submitted. The access key for judges goes only into the testing
+(Erik's account). Status: submitted 22 Oct 2026, editable until 12 Nov 2026 12:00 PT. The access key for judges goes only into the testing
 instructions field, never into this file.
 
 ## Project overview
