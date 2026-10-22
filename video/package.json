@@ -10,7 +10,7 @@
     "still": "remotion still src/index.ts KassaDemo out/still.png --browser-executable=/usr/bin/google-chrome",
     "prestudio": "node scripts/link-clips.mjs",
     "studio": "remotion studio src/index.ts --browser-executable=/usr/bin/google-chrome",
-    "audio": "/root/Frappua/projects/paypal-agent/.venv/bin/python scripts/make_audio.py",
+    "audio": "python scripts/make_audio.py",
     "sheet": "ffmpeg -y -i out/kassa-demo.mp4 -vf \"fps=1/5,scale=320:-1,tile=6x6\" -frames:v 1 out/sheet.png"
   },
   "keywords": [],

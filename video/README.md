@@ -5,7 +5,7 @@ Output: `out/kassa-demo.mp4`, 1920x1080, 30 fps, H.264 + AAC, voice-over only (n
 
 ## Commands
 ```bash
-npm run audio     # voice-over: one mp3 per scene (edge-tts, en-GB-RyanNeural, -5 %) + src/audioConfig.ts
+npm run audio     # voice-over (python with edge-tts on PATH): one mp3 per scene (edge-tts, en-GB-RyanNeural, -5 %) + src/audioConfig.ts
 npm run render    # full video -> out/kassa-demo.mp4 (17 min on the hub, 20 Oct)
 npm run still -- --frame=1500   # one frame -> out/still.png
 npm run studio    # live preview in the browser

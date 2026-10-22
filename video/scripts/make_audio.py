@@ -1,6 +1,6 @@
 """Generate one voice-over mp3 per scene from docs/video-script.md and write src/audioConfig.ts.
 
-Run from anywhere:  /root/Frappua/projects/paypal-agent/.venv/bin/python video/scripts/make_audio.py [--force]
+Run from anywhere:  python video/scripts/make_audio.py [--force]   (needs `pip install edge-tts` and ffprobe)
 Texts are taken verbatim from the Voice-over column of the script table.
 """
 import json, re, subprocess, sys
@@ -9,7 +9,7 @@ from pathlib import Path
 VIDEO = Path(__file__).resolve().parent.parent
 SCRIPT = VIDEO.parent / "docs" / "video-script.md"
 AUDIO = VIDEO / "public" / "audio"
-PY = "/root/Frappua/projects/paypal-agent/.venv/bin/python"
+PY = sys.executable  # the interpreter that runs this script; edge-tts must be installed in it
 IDS = ["intro", "rules", "scene1", "scene2", "scene3", "chat", "closing"]
 FPS = 30
 

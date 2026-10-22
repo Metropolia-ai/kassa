@@ -7,7 +7,7 @@ Everything lives in `video/` (Remotion project, Node 18, renders with the system
 1. **Screen clips** recorded from the hosted demo on a virtual display (Xvfb :99, 1920x1080), Chrome in `--app`
    mode (no tabs, no address bar), cursor hidden; ffmpeg x11grab at 30 fps. Output `video/clips/*.mp4` and
    `video/clips/manifest.json`.
-2. **Voice-over** per scene with edge-tts (`/root/Frappua/projects/paypal-agent/.venv/bin/python -m edge_tts`),
+2. **Voice-over** per scene with edge-tts (`python -m edge_tts`, `pip install edge-tts`),
    voice `en-GB-RyanNeural`, rate -5 %. Output `video/public/audio/<scene>.mp3`. Scene length = max(audio + 0.6 s,
    the clip segment it shows).
 3. **Composition** in Remotion: title cards, framed clips with animated callouts, stamps, the architecture

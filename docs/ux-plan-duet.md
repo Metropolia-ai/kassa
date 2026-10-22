@@ -14,7 +14,7 @@ Assumptions (A1-A4, to confirm with the owner):
 
 ## Tasks
 1. Erik: an invoice from Pixelforge arrived. Nothing to do: see that it was checked, argued and paid, and why.
-   Done = the bill row says Paid with "Settled by the agents in 14 s, no one interrupted" and the thread is one click away.
+   Done = the bill row says Paid with "Settled by the agents in 25 s, no one interrupted" and the thread is one click away.
 2. Erik: Kassa needs him. Decide in one click with the numbers in front of him. Done = the card is gone,
    the bill goes on to Paid, the thread shows his decision.
 3. Mika: send the October invoice to Frappua and get paid without chasing. Done = the invoice row says Paid,
@@ -41,7 +41,7 @@ Pixelforge's Kassa (`/?co=pixelforge`): same shell, supplier role:
 
 Both: threads advance on their own while a window is open (the page polls `/api/duet/tick` every 2 s).
 Feedback: a toast when a bill arrives ("New bill from Pixelforge Oy, 337.00 EUR. Kassa is checking it."),
-when it settles ("Paid 337.00 EUR to Pixelforge Oy. Settled by the agents in 14 s."), when a card appears.
+when it settles ("Paid 337.00 EUR to Pixelforge Oy. Settled by the agents in 25 s."), when a card appears.
 
 ## Walk (four questions) - fixed in the design
 - Step "send invoice": the label is the user's verb; the result is a row with `Sent` and then `Being checked by Frappua`.
